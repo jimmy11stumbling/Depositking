@@ -44,6 +44,17 @@ export default function GenerateLetterPage() {
 
   useEffect(() => {
     if (!caseData) return;
+
+    if (caseData.status === "signed") {
+      navigate(`/cases/${caseId}/letter`);
+      return;
+    }
+
+    if (caseData.status === "generated") {
+      navigate(`/cases/${caseId}/letter`);
+      return;
+    }
+
     if (caseData.paid) {
       setPaymentVerified(true);
       return;

@@ -191,6 +191,19 @@ export async function registerRoutes(
         return;
       }
 
+      if (caseData.status === "signed") {
+        send({ status: "error", message: "This case has already been signed and finalized" });
+        res.end();
+        return;
+      }
+
+      const existingLetter = await storage.getLetterByCase(caseId);
+      if (existingLetter && caseData.status === "generated") {
+        send({ status: "error", message: "Letter already generated. View it from your case dashboard." });
+        res.end();
+        return;
+      }
+
       const law = STATE_LAWS[caseData.state];
       if (!law) {
         send({ status: "error", message: "State law not found" });
@@ -349,7 +362,7 @@ export async function registerRoutes(
       });
 
       await storage.updateCase(caseId, {
-        status: "analysis",
+        status: "generated",
         potentialRecovery: (strategyBrief.total_claim || analysis.totalPotentialRecovery).toString(),
       });
 
@@ -357,6 +370,7 @@ export async function registerRoutes(
       res.end();
     } catch (err: any) {
       console.error("Generation pipeline error:", err);
+      await storage.updateCase(caseId, { status: "analysis" });
       send({ status: "error", message: err.message || "Generation failed" });
       res.end();
     }
@@ -365,6 +379,20 @@ export async function registerRoutes(
   app.post("/api/cases/:id/sign", async (req, res) => {
     try {
       const caseId = parseInt(req.params.id);
+      const caseData = await storage.getCase(caseId);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      if (caseData.status === "signed") {
+        return res.status(400).json({ error: "This case has already been signed" });
+      }
+      if (!caseData.paid) {
+        return res.status(403).json({ error: "Payment required" });
+      }
+
+      const letter = await storage.getLetterByCase(caseId);
+      if (!letter) {
+        return res.status(400).json({ error: "No letter has been generated for this case" });
+      }
+
       const signatureSchema = z.object({
         signatureBase64: z.string().min(1000, "Signature data is required"),
       });
@@ -377,6 +405,17 @@ export async function registerRoutes(
       await storage.updateCase(caseId, { status: "signed" });
 
       res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/cases/:id/signature", async (req, res) => {
+    try {
+      const caseId = parseInt(req.params.id);
+      const signature = await storage.getSignatureByCase(caseId);
+      if (!signature) return res.status(404).json({ error: "No signature found" });
+      res.json(signature);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

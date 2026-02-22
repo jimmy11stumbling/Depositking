@@ -286,3 +286,18 @@
     inset: -1px;
   }
 }
+
+@media print {
+  .print\\:hidden {
+    display: none !important;
+  }
+  .print\\:shadow-none {
+    box-shadow: none !important;
+  }
+  .print\\:border-none {
+    border: none !important;
+  }
+  body {
+    background: white !important;
+  }
+}

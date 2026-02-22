@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Case, Letter } from "@shared/schema";
+import type { Case, Letter, Signature } from "@shared/schema";
+import DOMPurify from "dompurify";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Shield, ArrowLeft, CheckCircle2, AlertTriangle, Eraser, Send, Loader2, FileText,
+  Printer, Download, Mail, Scale, ArrowRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -34,6 +36,21 @@ export default function LetterPreviewPage() {
     queryKey: ["/api/cases", caseId, "letter"],
   });
 
+  const { data: signature } = useQuery<Signature>({
+    queryKey: ["/api/cases", caseId, "signature"],
+    enabled: caseData?.status === "signed",
+  });
+
+  const isSigned = caseData?.status === "signed";
+
+  const sanitizedHtml = useMemo(() => {
+    if (!letter?.finalHtml) return "";
+    return DOMPurify.sanitize(letter.finalHtml, {
+      ALLOWED_TAGS: ["p", "br", "strong", "em", "b", "i", "u", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "span", "div", "table", "thead", "tbody", "tr", "td", "th", "blockquote", "hr", "sup", "sub"],
+      ALLOWED_ATTR: ["class", "style"],
+    });
+  }, [letter?.finalHtml]);
+
   const submitSignature = useMutation({
     mutationFn: async (signatureBase64: string) => {
       const res = await apiRequest("POST", `/api/cases/${caseId}/sign`, {
@@ -45,7 +62,6 @@ export default function LetterPreviewPage() {
     onSuccess: () => {
       toast({ title: "Letter Signed", description: "Your demand letter has been signed and finalized." });
       queryClient.invalidateQueries({ queryKey: ["/api/cases", caseId] });
-      navigate(`/cases/${caseId}`);
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -53,6 +69,7 @@ export default function LetterPreviewPage() {
   });
 
   useEffect(() => {
+    if (isSigned) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -66,7 +83,7 @@ export default function LetterPreviewPage() {
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-  }, [letter]);
+  }, [letter, isSigned]);
 
   const getPos = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current;
@@ -151,6 +168,10 @@ export default function LetterPreviewPage() {
     submitSignature.mutate(signatureBase64);
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   const isLoading = caseLoading || letterLoading;
 
   if (isLoading) {
@@ -185,7 +206,7 @@ export default function LetterPreviewPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-background/95 backdrop-blur sticky top-0 z-50">
+      <header className="border-b bg-background/95 backdrop-blur sticky top-0 z-50 print:hidden">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2">
           <button
             onClick={() => navigate(`/cases/${caseId}`)}
@@ -197,6 +218,12 @@ export default function LetterPreviewPage() {
             <span className="font-serif text-sm font-bold text-foreground">Back to Case</span>
           </button>
           <div className="flex items-center gap-2">
+            {isSigned && (
+              <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 text-xs">
+                <CheckCircle2 className="mr-1 h-3 w-3" />
+                Signed
+              </Badge>
+            )}
             {letter.confidenceScore && (
               <Badge variant="secondary" className="text-xs" data-testid="badge-confidence">
                 {letter.confidenceScore}% confidence
@@ -208,107 +235,172 @@ export default function LetterPreviewPage() {
       </header>
 
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        <div className="text-center mb-4">
+        <div className="text-center mb-4 print:hidden">
           <h1 className="font-serif text-2xl font-bold text-foreground mb-1">
-            Review Your Demand Letter
+            {isSigned ? "Your Signed Demand Letter" : "Review Your Demand Letter"}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Read the letter carefully, then sign below to finalize it.
+            {isSigned
+              ? "Your letter is finalized. Print or download it to send to your landlord."
+              : "Read the letter carefully, then sign below to finalize it."}
           </p>
         </div>
 
-        <Card className="p-6 sm:p-8 bg-white dark:bg-white text-gray-900">
+        {isSigned && (
+          <div className="flex flex-wrap justify-center gap-2 print:hidden">
+            <Button onClick={handlePrint} data-testid="button-print-letter">
+              <Printer className="mr-2 h-4 w-4" />
+              Print Letter
+            </Button>
+            <Button variant="outline" onClick={() => navigate(`/cases/${caseId}`)} data-testid="button-back-to-case">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Case
+            </Button>
+          </div>
+        )}
+
+        <Card className="p-6 sm:p-8 bg-white dark:bg-white text-gray-900 print:shadow-none print:border-none">
           <div
             className="prose prose-sm max-w-none font-serif leading-relaxed"
             style={{ color: "#1a1a1a" }}
-            dangerouslySetInnerHTML={{ __html: letter.finalHtml }}
+            dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
             data-testid="text-letter-content"
           />
+
+          {isSigned && signature && (
+            <div className="mt-8 pt-4 border-t border-gray-300">
+              <p className="text-xs text-gray-500 mb-2">Electronically signed:</p>
+              <img
+                src={signature.signatureBase64}
+                alt="Signature"
+                className="max-h-20 max-w-[200px]"
+                data-testid="img-signature"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Signed on {new Date(signature.signedAt).toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </p>
+            </div>
+          )}
         </Card>
 
-        <div ref={signatureSectionRef} className="space-y-4" id="signature-section">
-          <Card className="p-5">
+        {isSigned && (
+          <Card className="p-5 sm:p-6 print:hidden">
             <div className="flex items-center gap-2 mb-4">
-              <FileText className="h-5 w-5 text-[#2E5FAA]" />
-              <h3 className="font-serif text-lg font-bold text-foreground">Sign Your Letter</h3>
+              <Mail className="h-5 w-5 text-[#2E5FAA]" />
+              <h3 className="font-serif text-lg font-bold text-foreground">Next Steps</h3>
             </div>
-
-            <div className="mb-4">
-              <div
-                className={`relative border-2 rounded-md bg-white ${
-                  sigError ? "border-red-500" : "border-input"
-                }`}
-                style={{ touchAction: "none" }}
-              >
-                <canvas
-                  ref={canvasRef}
-                  className="w-full cursor-crosshair"
-                  style={{ height: "200px", display: "block" }}
-                  onMouseDown={startDraw}
-                  onMouseMove={draw}
-                  onMouseUp={stopDraw}
-                  onMouseLeave={stopDraw}
-                  onTouchStart={startDraw}
-                  onTouchMove={draw}
-                  onTouchEnd={stopDraw}
-                  data-testid="canvas-signature"
-                />
-                <div className="absolute bottom-3 left-4 right-4 border-t border-gray-300 pointer-events-none" />
-                <span className="absolute bottom-1 left-4 text-[10px] text-gray-400 pointer-events-none">
-                  Sign above the line
-                </span>
-              </div>
-              {sigError && (
-                <p className="text-sm text-destructive mt-2" data-testid="text-sig-error">{sigError}</p>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearSignature}
-                className="mt-2"
-                data-testid="button-clear-signature"
-              >
-                <Eraser className="mr-1 h-3 w-3" />
-                Clear
-              </Button>
+            <div className="space-y-3">
+              {[
+                { step: "1", title: "Print Your Letter", desc: "Print the letter on standard white paper using the Print button above." },
+                { step: "2", title: "Send via Certified Mail", desc: "Send the letter via USPS Certified Mail with Return Receipt Requested. This creates a legal record proving your landlord received the letter." },
+                { step: "3", title: "Keep Copies", desc: "Keep a copy of the letter, the certified mail receipt, and the return receipt card for your records." },
+                { step: "4", title: "Wait 10 Business Days", desc: "Allow your landlord 10 business days to respond. If they don't, you can file in Small Claims Court." },
+              ].map((item) => (
+                <div key={item.step} className="flex gap-3 p-3 rounded-md bg-card border">
+                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-[#2E5FAA]/10 flex items-center justify-center">
+                    <span className="text-[#2E5FAA] font-bold text-xs">{item.step}</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm text-foreground">{item.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+                  </div>
+                </div>
+              ))}
             </div>
-
-            <div className="flex items-start gap-3 p-3 rounded-md bg-card border mb-4">
-              <Checkbox
-                id="certify"
-                checked={certified}
-                onCheckedChange={(checked) => setCertified(checked === true)}
-                data-testid="checkbox-certify"
-              />
-              <label
-                htmlFor="certify"
-                className="text-sm text-foreground leading-relaxed cursor-pointer"
-              >
-                I certify that all information above is accurate and true to the best of my knowledge. I understand this letter will be sent to my landlord as a formal legal demand.
-              </label>
-            </div>
-
-            <Button
-              size="lg"
-              onClick={handleSend}
-              disabled={submitSignature.isPending}
-              data-testid="button-submit-signature"
-              className="w-full bg-[#C9A84C] text-white border-[#b8963f] text-base"
-            >
-              {submitSignature.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing...
-                </>
-              ) : (
-                <>
-                  <Send className="mr-2 h-4 w-4" />
-                  Sign & Finalize Letter
-                </>
-              )}
-            </Button>
           </Card>
-        </div>
+        )}
+
+        {!isSigned && (
+          <div ref={signatureSectionRef} className="space-y-4" id="signature-section">
+            <Card className="p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <FileText className="h-5 w-5 text-[#2E5FAA]" />
+                <h3 className="font-serif text-lg font-bold text-foreground">Sign Your Letter</h3>
+              </div>
+
+              <div className="mb-4">
+                <div
+                  className={`relative border-2 rounded-md bg-white ${
+                    sigError ? "border-red-500" : "border-input"
+                  }`}
+                  style={{ touchAction: "none" }}
+                >
+                  <canvas
+                    ref={canvasRef}
+                    className="w-full cursor-crosshair"
+                    style={{ height: "200px", display: "block" }}
+                    onMouseDown={startDraw}
+                    onMouseMove={draw}
+                    onMouseUp={stopDraw}
+                    onMouseLeave={stopDraw}
+                    onTouchStart={startDraw}
+                    onTouchMove={draw}
+                    onTouchEnd={stopDraw}
+                    data-testid="canvas-signature"
+                  />
+                  <div className="absolute bottom-3 left-4 right-4 border-t border-gray-300 pointer-events-none" />
+                  <span className="absolute bottom-1 left-4 text-[10px] text-gray-400 pointer-events-none">
+                    Sign above the line
+                  </span>
+                </div>
+                {sigError && (
+                  <p className="text-sm text-destructive mt-2" data-testid="text-sig-error">{sigError}</p>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearSignature}
+                  className="mt-2"
+                  data-testid="button-clear-signature"
+                >
+                  <Eraser className="mr-1 h-3 w-3" />
+                  Clear
+                </Button>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 rounded-md bg-card border mb-4">
+                <Checkbox
+                  id="certify"
+                  checked={certified}
+                  onCheckedChange={(checked) => setCertified(checked === true)}
+                  data-testid="checkbox-certify"
+                />
+                <label
+                  htmlFor="certify"
+                  className="text-sm text-foreground leading-relaxed cursor-pointer"
+                >
+                  I certify that all information above is accurate and true to the best of my knowledge. I understand this letter will be sent to my landlord as a formal legal demand.
+                </label>
+              </div>
+
+              <Button
+                size="lg"
+                onClick={handleSend}
+                disabled={submitSignature.isPending}
+                data-testid="button-submit-signature"
+                className="w-full bg-[#C9A84C] text-white border-[#b8963f] text-base"
+              >
+                {submitSignature.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Signing...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Sign & Finalize Letter
+                  </>
+                )}
+              </Button>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

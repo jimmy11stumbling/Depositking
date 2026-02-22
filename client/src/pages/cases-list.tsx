@@ -21,7 +21,16 @@ const statusColors: Record<string, string> = {
   intake: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
   analysis: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   generating: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+  generated: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
   signed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+};
+
+const statusLabels: Record<string, string> = {
+  intake: "Intake",
+  analysis: "Analyzed",
+  generating: "Generating",
+  generated: "Letter Ready",
+  signed: "Signed",
 };
 
 export default function CasesListPage() {
@@ -97,7 +106,7 @@ export default function CasesListPage() {
                           {law?.state || c.state} — {formatCurrency(parseFloat(c.depositAmount))}
                         </h3>
                         <Badge className={`text-xs ${statusColors[c.status] || "bg-muted text-muted-foreground"}`}>
-                          {c.status}
+                          {statusLabels[c.status] || c.status}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">

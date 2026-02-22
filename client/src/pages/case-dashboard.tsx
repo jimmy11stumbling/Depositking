@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Shield, ArrowLeft, ArrowRight, AlertTriangle, CheckCircle2, Clock,
   Scale, DollarSign, Plus, Trash2, FileText, Sparkles, CreditCard, Loader2,
+  Download, Printer, Eye,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -313,46 +314,110 @@ export default function CaseDashboard() {
           </div>
         </Card>
 
-        <Card className="p-5 sm:p-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-center sm:text-left">
-              <h3 className="font-serif text-lg font-bold text-foreground mb-1">
-                {caseData.paid ? "Ready to Generate" : "Generate Your Demand Letter"}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {caseData.paid
-                  ? "Payment received. Generate your AI-powered demand letter now."
-                  : "Our AI legal team will research, analyze, and draft your letter for $29."}
-              </p>
+        {caseData.status === "signed" ? (
+          <Card className="p-5 sm:p-6 bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-green-900 dark:text-green-200 mb-1">
+                    Case Finalized
+                  </h3>
+                  <p className="text-sm text-green-700 dark:text-green-300">
+                    Your demand letter has been signed. View, download, or print it to send to your landlord.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                <Button
+                  data-testid="button-view-signed-letter"
+                  onClick={() => navigate(`/cases/${caseId}/letter`)}
+                  className="bg-[#1E3A5F] text-white"
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  View Letter
+                </Button>
+                <Button
+                  variant="outline"
+                  data-testid="button-print-letter"
+                  onClick={() => {
+                    navigate(`/cases/${caseId}/letter`);
+                    setTimeout(() => window.print(), 500);
+                  }}
+                >
+                  <Printer className="mr-2 h-4 w-4" />
+                  Print
+                </Button>
+              </div>
             </div>
-            {caseData.paid ? (
+          </Card>
+        ) : caseData.status === "generated" ? (
+          <Card className="p-5 sm:p-6 bg-[#2E5FAA]/5 border-[#2E5FAA]/20">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <FileText className="h-6 w-6 text-[#2E5FAA] flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-foreground mb-1">
+                    Letter Ready for Review
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Your demand letter has been generated. Review it and sign to finalize.
+                  </p>
+                </div>
+              </div>
               <Button
                 size="lg"
-                data-testid="button-generate-letter"
-                onClick={() => navigate(`/cases/${caseId}/generate`)}
+                data-testid="button-review-sign-letter"
+                onClick={() => navigate(`/cases/${caseId}/letter`)}
                 className="bg-[#C9A84C] text-white border-[#b8963f] text-base px-8 whitespace-nowrap"
               >
-                <Sparkles className="mr-2 h-4 w-4" />
-                Generate Letter
+                <FileText className="mr-2 h-4 w-4" />
+                Review & Sign Letter
               </Button>
-            ) : (
-              <Button
-                size="lg"
-                data-testid="button-pay-generate"
-                onClick={() => checkout.mutate()}
-                disabled={checkout.isPending}
-                className="bg-[#C9A84C] text-white border-[#b8963f] text-base px-8 whitespace-nowrap"
-              >
-                {checkout.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <CreditCard className="mr-2 h-4 w-4" />
-                )}
-                {checkout.isPending ? "Processing..." : "Pay $29 & Generate Letter"}
-              </Button>
-            )}
-          </div>
-        </Card>
+            </div>
+          </Card>
+        ) : (
+          <Card className="p-5 sm:p-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-center sm:text-left">
+                <h3 className="font-serif text-lg font-bold text-foreground mb-1">
+                  {caseData.paid ? "Ready to Generate" : "Generate Your Demand Letter"}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {caseData.paid
+                    ? "Payment received. Generate your AI-powered demand letter now."
+                    : "Our AI legal team will research, analyze, and draft your letter for $29."}
+                </p>
+              </div>
+              {caseData.paid ? (
+                <Button
+                  size="lg"
+                  data-testid="button-generate-letter"
+                  onClick={() => navigate(`/cases/${caseId}/generate`)}
+                  className="bg-[#C9A84C] text-white border-[#b8963f] text-base px-8 whitespace-nowrap"
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Generate Letter
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  data-testid="button-pay-generate"
+                  onClick={() => checkout.mutate()}
+                  disabled={checkout.isPending}
+                  className="bg-[#C9A84C] text-white border-[#b8963f] text-base px-8 whitespace-nowrap"
+                >
+                  {checkout.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <CreditCard className="mr-2 h-4 w-4" />
+                  )}
+                  {checkout.isPending ? "Processing..." : "Pay $29 & Generate Letter"}
+                </Button>
+              )}
+            </div>
+          </Card>
+        )}
 
         <Card className="p-4">
           <h4 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
