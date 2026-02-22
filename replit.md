@@ -35,6 +35,13 @@ AI-powered legal technology platform that helps residential tenants recover secu
 - Professional legal tech aesthetic
 - Font: serif for headings, sans-serif for body
 
+## API Routes
+- All POST routes use Zod validation via drizzle-zod insert schemas
+- POST `/api/cases` - Create case (insertCaseSchema)
+- POST `/api/cases/:id/deductions` - Add deduction (insertDeductionSchema)
+- POST `/api/cases/:id/sign` - Sign letter (custom Zod schema)
+- GET `/api/cases/:id/generate` - SSE stream for AI letter generation
+
 ## Running
 - `npm run dev` starts Express + Vite on port 5000
 - `npm run db:push` pushes schema to database
