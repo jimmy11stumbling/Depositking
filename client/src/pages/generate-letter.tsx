@@ -76,7 +76,7 @@ export default function GenerateLetterPage() {
     } else if (!sessionId && !caseData.paid) {
       navigate(`/cases/${caseId}`);
     }
-  }, [caseData, sessionId]);
+  }, [caseData, sessionId, paymentVerified, navigate, caseId]);
 
   const startGeneration = () => {
     setIsGenerating(true);

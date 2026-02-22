@@ -93,7 +93,7 @@ export default function NewCasePage() {
 
   const canProceedToStep3 = () => {
     const values = form.getValues();
-    return values.tenantName && values.tenantAddress;
+    return values.tenantName && values.tenantAddress && values.propertyAddress;
   };
 
   return (
