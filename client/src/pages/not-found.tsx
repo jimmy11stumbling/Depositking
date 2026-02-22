@@ -2,14 +2,17 @@ import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Shield, ArrowLeft } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-provider";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 export default function NotFound() {
   const [, navigate] = useLocation();
+  usePageTitle("Page Not Found");
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b bg-background/95 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <button
             onClick={() => navigate("/")}
             className="flex items-center gap-2 text-muted-foreground hover-elevate rounded-md px-2 py-1"
@@ -19,6 +22,7 @@ export default function NotFound() {
             <Shield className="h-5 w-5 text-[#2E5FAA]" />
             <span className="font-serif text-sm font-bold text-foreground">Deposit Retriever</span>
           </button>
+          <ThemeToggle />
         </div>
       </header>
 

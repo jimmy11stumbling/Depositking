@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Shield, ArrowLeft, ArrowRight, MapPin, Calendar, DollarSign, User, Building2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ThemeToggle } from "@/components/theme-provider";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 const caseFormSchema = z.object({
   state: z.string().min(1, "Please select a state"),
@@ -37,6 +39,7 @@ export default function NewCasePage() {
   const [, navigate] = useLocation();
   const [step, setStep] = useState(1);
   const { toast } = useToast();
+  usePageTitle("Start Your Case");
 
   const form = useForm<CaseFormValues>({
     resolver: zodResolver(caseFormSchema),
@@ -110,6 +113,7 @@ export default function NewCasePage() {
             <span className="font-serif text-sm font-bold text-foreground">Deposit Retriever</span>
           </button>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             {[1, 2, 3].map((s) => (
               <div
                 key={s}

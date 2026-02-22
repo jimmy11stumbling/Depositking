@@ -9,6 +9,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Shield, ArrowLeft, ArrowRight, Plus, FileText, Clock,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-provider";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -35,6 +37,7 @@ const statusLabels: Record<string, string> = {
 
 export default function CasesListPage() {
   const [, navigate] = useLocation();
+  usePageTitle("Your Cases");
 
   const { data: cases, isLoading } = useQuery<Case[]>({
     queryKey: ["/api/cases"],
@@ -53,10 +56,13 @@ export default function CasesListPage() {
             <Shield className="h-5 w-5 text-[#2E5FAA]" />
             <span className="font-serif text-sm font-bold text-foreground">Deposit Retriever</span>
           </button>
-          <Button onClick={() => navigate("/new-case")} data-testid="button-new-case">
-            <Plus className="mr-1 h-4 w-4" />
-            New Case
-          </Button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <Button onClick={() => navigate("/new-case")} data-testid="button-new-case">
+              <Plus className="mr-1 h-4 w-4" />
+              New Case
+            </Button>
+          </div>
         </div>
       </header>
 

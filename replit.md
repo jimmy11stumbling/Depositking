@@ -35,10 +35,17 @@ AI-powered legal technology platform that helps residential tenants recover secu
 6. Letter preview + electronic signature
 7. Case finalized (signed status)
 
+## Features
+- **PDF Download**: Signed demand letters can be downloaded as PDF via html2canvas + jsPDF
+- **Dark Mode**: Class-based dark mode with ThemeProvider, localStorage persistence, system preference detection
+- **Per-Page SEO Titles**: Dynamic document.title via usePageTitle hook on every page
+- **Theme Toggle**: Moon/Sun icon button in every page header (`client/src/components/theme-provider.tsx`)
+
 ## Design Theme
 - Slate Navy (#1E3A5F), Authority Blue (#2E5FAA), Gold (#C9A84C)
 - Professional legal tech aesthetic
 - Font: serif for headings, sans-serif for body
+- Dark mode support via CSS variables in `:root` and `.dark` classes
 
 ## API Routes
 - All POST routes use Zod validation via drizzle-zod insert schemas

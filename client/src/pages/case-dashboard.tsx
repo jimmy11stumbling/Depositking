@@ -16,6 +16,8 @@ import {
   Download, Printer, Eye,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ThemeToggle } from "@/components/theme-provider";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -39,6 +41,8 @@ export default function CaseDashboard() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [newDeduction, setNewDeduction] = useState({ description: "", amount: "", disputeReason: "" });
+
+  usePageTitle(`Case #${caseId} Dashboard`);
 
   const { data: caseData, isLoading: caseLoading } = useQuery<Case>({
     queryKey: ["/api/cases", caseId],
@@ -149,9 +153,12 @@ export default function CaseDashboard() {
             <Shield className="h-5 w-5 text-[#2E5FAA]" />
             <span className="font-serif text-sm font-bold text-foreground">Deposit Retriever</span>
           </button>
-          <Badge variant="secondary" data-testid="badge-case-status">
-            Case #{caseData.id}
-          </Badge>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <Badge variant="secondary" data-testid="badge-case-status">
+              Case #{caseData.id}
+            </Badge>
+          </div>
         </div>
       </header>
 

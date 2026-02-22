@@ -13,6 +13,8 @@ import {
   Search, Scale, FileText, ShieldCheck, Sparkles,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ThemeToggle } from "@/components/theme-provider";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 const agentMeta: Record<string, { icon: any; label: string; description: string }> = {
   paralegal: { icon: Search, label: "Paralegal Researcher", description: "Researching current statutes and verifying legal information..." },
@@ -37,6 +39,8 @@ export default function GenerateLetterPage() {
   const [paymentVerified, setPaymentVerified] = useState(false);
   const [verifyingPayment, setVerifyingPayment] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
+
+  usePageTitle(`Generate Letter - Case #${caseId}`);
 
   const { data: caseData, isLoading } = useQuery<Case>({
     queryKey: ["/api/cases", caseId],
@@ -169,7 +173,10 @@ export default function GenerateLetterPage() {
             <Shield className="h-5 w-5 text-[#2E5FAA]" />
             <span className="font-serif text-sm font-bold text-foreground">Back to Case</span>
           </button>
-          <Badge variant="secondary">Case #{caseId}</Badge>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <Badge variant="secondary">Case #{caseId}</Badge>
+          </div>
         </div>
       </header>
 

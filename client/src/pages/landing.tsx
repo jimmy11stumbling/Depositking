@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Shield, Scale, FileText, Clock, ArrowRight, CheckCircle2, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
+import { ThemeToggle } from "@/components/theme-provider";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -15,6 +17,7 @@ const fadeUp = {
 
 export default function LandingPage() {
   const [, navigate] = useLocation();
+  usePageTitle();
 
   return (
     <div className="min-h-screen bg-background">
@@ -26,13 +29,16 @@ export default function LandingPage() {
               The Deposit Retriever
             </span>
           </div>
-          <Button
-            data-testid="button-start-case-header"
-            onClick={() => navigate("/new-case")}
-          >
-            Start Your Case
-            <ArrowRight className="ml-1 h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <Button
+              data-testid="button-start-case-header"
+              onClick={() => navigate("/new-case")}
+            >
+              Start Your Case
+              <ArrowRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </header>
 

@@ -4,6 +4,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Case, Letter, Signature } from "@shared/schema";
 import DOMPurify from "dompurify";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +16,8 @@ import {
   Printer, Download, Mail, Scale, ArrowRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ThemeToggle } from "@/components/theme-provider";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 export default function LetterPreviewPage() {
   const params = useParams<{ id: string }>();
@@ -22,10 +26,12 @@ export default function LetterPreviewPage() {
   const { toast } = useToast();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const letterContentRef = useRef<HTMLDivElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSigned, setHasSigned] = useState(false);
   const [certified, setCertified] = useState(false);
   const [sigError, setSigError] = useState("");
+  const [isDownloading, setIsDownloading] = useState(false);
   const signatureSectionRef = useRef<HTMLDivElement>(null);
 
   const { data: caseData, isLoading: caseLoading } = useQuery<Case>({
@@ -42,6 +48,8 @@ export default function LetterPreviewPage() {
   });
 
   const isSigned = caseData?.status === "signed";
+
+  usePageTitle(isSigned ? `Signed Letter - Case #${caseId}` : `Review Letter - Case #${caseId}`);
 
   const sanitizedHtml = useMemo(() => {
     if (!letter?.finalHtml) return "";
@@ -172,6 +180,77 @@ export default function LetterPreviewPage() {
     window.print();
   };
 
+  const handleDownloadPDF = async () => {
+    const element = letterContentRef.current;
+    if (!element) return;
+
+    setIsDownloading(true);
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "letter");
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const contentWidth = pdfWidth - margin * 2;
+
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = contentWidth / imgWidth;
+      const scaledHeight = imgHeight * ratio;
+      const maxContentHeight = pdfHeight - margin * 2;
+
+      if (scaledHeight <= maxContentHeight) {
+        pdf.addImage(imgData, "PNG", margin, margin, contentWidth, scaledHeight);
+      } else {
+        let remainingHeight = imgHeight;
+        let sourceY = 0;
+        let page = 0;
+
+        while (remainingHeight > 0) {
+          if (page > 0) pdf.addPage();
+
+          const sliceHeight = Math.min(remainingHeight, maxContentHeight / ratio);
+
+          const sliceCanvas = document.createElement("canvas");
+          sliceCanvas.width = imgWidth;
+          sliceCanvas.height = sliceHeight;
+          const sliceCtx = sliceCanvas.getContext("2d");
+          if (sliceCtx) {
+            sliceCtx.fillStyle = "#ffffff";
+            sliceCtx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+            sliceCtx.drawImage(
+              canvas,
+              0, sourceY, imgWidth, sliceHeight,
+              0, 0, imgWidth, sliceHeight
+            );
+          }
+
+          const sliceData = sliceCanvas.toDataURL("image/png");
+          pdf.addImage(sliceData, "PNG", margin, margin, contentWidth, sliceHeight * ratio);
+
+          sourceY += sliceHeight;
+          remainingHeight -= sliceHeight;
+          page++;
+        }
+      }
+
+      pdf.save(`demand-letter-case-${caseId}.pdf`);
+      toast({ title: "Downloaded", description: "Your demand letter has been saved as a PDF." });
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      toast({ title: "Download Failed", description: "Could not generate PDF. Try using Print instead.", variant: "destructive" });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   const isLoading = caseLoading || letterLoading;
 
   if (isLoading) {
@@ -218,6 +297,7 @@ export default function LetterPreviewPage() {
             <span className="font-serif text-sm font-bold text-foreground">Back to Case</span>
           </button>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             {isSigned && (
               <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 text-xs">
                 <CheckCircle2 className="mr-1 h-3 w-3" />
@@ -252,6 +332,19 @@ export default function LetterPreviewPage() {
               <Printer className="mr-2 h-4 w-4" />
               Print Letter
             </Button>
+            <Button
+              variant="outline"
+              onClick={handleDownloadPDF}
+              disabled={isDownloading}
+              data-testid="button-download-pdf"
+            >
+              {isDownloading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              {isDownloading ? "Generating PDF..." : "Download PDF"}
+            </Button>
             <Button variant="outline" onClick={() => navigate(`/cases/${caseId}`)} data-testid="button-back-to-case">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Case
@@ -260,12 +353,13 @@ export default function LetterPreviewPage() {
         )}
 
         <Card className="p-6 sm:p-8 bg-white dark:bg-white text-gray-900 print:shadow-none print:border-none">
-          <div
-            className="prose prose-sm max-w-none font-serif leading-relaxed"
-            style={{ color: "#1a1a1a" }}
-            dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
-            data-testid="text-letter-content"
-          />
+          <div ref={letterContentRef}>
+            <div
+              className="prose prose-sm max-w-none font-serif leading-relaxed"
+              style={{ color: "#1a1a1a" }}
+              dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+              data-testid="text-letter-content"
+            />
 
           {isSigned && signature && (
             <div className="mt-8 pt-4 border-t border-gray-300">
@@ -287,6 +381,7 @@ export default function LetterPreviewPage() {
               </p>
             </div>
           )}
+          </div>
         </Card>
 
         {isSigned && (
