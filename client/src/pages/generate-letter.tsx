@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { useLocation, useParams } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { queryClient } from "@/lib/queryClient";
+import { useLocation, useParams, useSearch } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Case, AgentStatus } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -27,15 +27,45 @@ export default function GenerateLetterPage() {
   const params = useParams<{ id: string }>();
   const caseId = parseInt(params.id);
   const [, navigate] = useLocation();
+  const searchString = useSearch();
+  const searchParams = new URLSearchParams(searchString);
+  const sessionId = searchParams.get("session_id");
   const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({});
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDone, setIsDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paymentVerified, setPaymentVerified] = useState(false);
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const { data: caseData, isLoading } = useQuery<Case>({
     queryKey: ["/api/cases", caseId],
   });
+
+  useEffect(() => {
+    if (!caseData) return;
+    if (caseData.paid) {
+      setPaymentVerified(true);
+      return;
+    }
+    if (sessionId && !paymentVerified) {
+      setVerifyingPayment(true);
+      apiRequest("POST", `/api/cases/${caseId}/verify-payment`, { sessionId })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.paid) {
+            setPaymentVerified(true);
+            queryClient.invalidateQueries({ queryKey: ["/api/cases", caseId] });
+          } else {
+            navigate(`/cases/${caseId}`);
+          }
+        })
+        .catch(() => navigate(`/cases/${caseId}`))
+        .finally(() => setVerifyingPayment(false));
+    } else if (!sessionId && !caseData.paid) {
+      navigate(`/cases/${caseId}`);
+    }
+  }, [caseData, sessionId]);
 
   const startGeneration = () => {
     setIsGenerating(true);
@@ -149,7 +179,14 @@ export default function GenerateLetterPage() {
           </p>
         </div>
 
-        {!isGenerating && !isDone && !error && (
+        {verifyingPayment && (
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 text-[#2E5FAA] animate-spin mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">Verifying payment...</p>
+          </div>
+        )}
+
+        {!isGenerating && !isDone && !error && paymentVerified && !verifyingPayment && (
           <div className="text-center">
             <Button
               size="lg"

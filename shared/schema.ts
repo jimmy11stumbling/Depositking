@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, decimal, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, decimal, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -18,6 +18,8 @@ export const cases = pgTable("cases", {
   status: varchar("status", { length: 50 }).default("intake").notNull(),
   potentialRecovery: decimal("potential_recovery", { precision: 10, scale: 2 }),
   daysPastDeadline: integer("days_past_deadline"),
+  paid: boolean("paid").default(false).notNull(),
+  stripeSessionId: text("stripe_session_id"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -54,6 +56,8 @@ export const insertCaseSchema = createInsertSchema(cases).omit({
   status: true,
   potentialRecovery: true,
   daysPastDeadline: true,
+  paid: true,
+  stripeSessionId: true,
 });
 
 export const insertDeductionSchema = createInsertSchema(deductions).omit({

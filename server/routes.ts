@@ -5,6 +5,9 @@ import { STATE_LAWS } from "../shared/stateLaws";
 import { insertCaseSchema, insertDeductionSchema } from "@shared/schema";
 import { runParalegalAgent, runAttorneyAgent, runDrafterAgent, runReviewerAgent } from "./agents";
 import { z } from "zod";
+import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { sql } from "drizzle-orm";
+import { db } from "./db";
 
 function calculateAnalysis(stateAbbr: string, moveOutDate: string, depositAmount: number, amountReturned: number) {
   const law = STATE_LAWS[stateAbbr];
@@ -178,6 +181,12 @@ export async function registerRoutes(
       const caseData = await storage.getCase(caseId);
       if (!caseData) {
         send({ status: "error", message: "Case not found" });
+        res.end();
+        return;
+      }
+
+      if (!caseData.paid) {
+        send({ status: "error", message: "Payment required before generating letter" });
         res.end();
         return;
       }
@@ -382,6 +391,91 @@ export async function registerRoutes(
     const law = STATE_LAWS[state];
     if (!law) return res.status(404).json({ error: "State not found" });
     res.json(law);
+  });
+
+  app.get("/api/stripe/publishable-key", async (_req, res) => {
+    try {
+      const key = await getStripePublishableKey();
+      res.json({ publishableKey: key });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/cases/:id/checkout", async (req, res) => {
+    try {
+      const caseId = parseInt(req.params.id);
+      const caseData = await storage.getCase(caseId);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      if (caseData.paid) return res.json({ alreadyPaid: true });
+
+      const stripe = await getUncachableStripeClient();
+
+      const priceResult = await db.execute(
+        sql`SELECT pr.id as price_id FROM stripe.products p 
+            JOIN stripe.prices pr ON pr.product = p.id 
+            WHERE p.name = 'Demand Letter' AND pr.active = true 
+            LIMIT 1`
+      );
+
+      if (!priceResult.rows.length) {
+        return res.status(500).json({ error: "Product not configured" });
+      }
+
+      const priceId = priceResult.rows[0].price_id as string;
+      const host = req.get('host');
+      const protocol = req.protocol;
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [{ price: priceId, quantity: 1 }],
+        mode: 'payment',
+        success_url: `${protocol}://${host}/cases/${caseId}/generate?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${protocol}://${host}/cases/${caseId}`,
+        metadata: { caseId: caseId.toString() },
+      });
+
+      await storage.updateCase(caseId, { stripeSessionId: session.id });
+
+      res.json({ url: session.url });
+    } catch (err: any) {
+      console.error("Checkout error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/cases/:id/verify-payment", async (req, res) => {
+    try {
+      const caseId = parseInt(req.params.id);
+      const { sessionId } = req.body;
+
+      const caseData = await storage.getCase(caseId);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      if (caseData.paid) return res.json({ paid: true });
+
+      if (!sessionId) return res.json({ paid: false });
+
+      if (caseData.stripeSessionId && caseData.stripeSessionId !== sessionId) {
+        return res.status(403).json({ error: "Session does not match this case" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      if (session.metadata?.caseId !== caseId.toString()) {
+        return res.status(403).json({ error: "Session does not belong to this case" });
+      }
+
+      if (session.payment_status === 'paid') {
+        await storage.updateCase(caseId, { paid: true, stripeSessionId: sessionId });
+        return res.json({ paid: true });
+      }
+
+      res.json({ paid: false });
+    } catch (err: any) {
+      console.error("Verify payment error:", err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   return httpServer;

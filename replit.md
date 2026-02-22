@@ -7,6 +7,7 @@ AI-powered legal technology platform that helps residential tenants recover secu
 - **Frontend**: React + Vite + Tailwind CSS + shadcn/ui + Framer Motion
 - **Backend**: Express.js with REST API
 - **Database**: PostgreSQL (Neon) via Drizzle ORM
+- **Payments**: Stripe (via Replit Stripe Integration) - $29 one-time payment for demand letter
 - **AI**: Google Gemini (via Replit AI Integrations) with 4-agent pipeline:
   1. Paralegal Researcher - verifies state statutes
   2. Strategy Attorney - assesses case strength
@@ -20,15 +21,19 @@ AI-powered legal technology platform that helps residential tenants recover secu
 - `server/routes.ts` - API endpoints
 - `server/storage.ts` - Database storage layer
 - `server/agents.ts` - 4-agent Gemini AI pipeline
+- `server/stripeClient.ts` - Stripe client setup (Replit connector)
+- `server/webhookHandlers.ts` - Stripe webhook processing
+- `server/seed-products.ts` - Script to create Stripe product ($29 Demand Letter)
 - `client/src/pages/` - All frontend pages
 
 ## User Flow
 1. Landing page → Start case
 2. 3-step intake form (deposit info, tenant info, landlord info)
 3. Case dashboard (violation detection, penalty calculator, deduction disputes)
-4. AI letter generation (4-agent pipeline with SSE progress)
-5. Letter preview + electronic signature
-6. Case finalized (signed status)
+4. Pay $29 via Stripe Checkout
+5. AI letter generation (4-agent pipeline with SSE progress)
+6. Letter preview + electronic signature
+7. Case finalized (signed status)
 
 ## Design Theme
 - Slate Navy (#1E3A5F), Authority Blue (#2E5FAA), Gold (#C9A84C)
@@ -39,8 +44,10 @@ AI-powered legal technology platform that helps residential tenants recover secu
 - All POST routes use Zod validation via drizzle-zod insert schemas
 - POST `/api/cases` - Create case (insertCaseSchema)
 - POST `/api/cases/:id/deductions` - Add deduction (insertDeductionSchema)
+- POST `/api/cases/:id/checkout` - Create Stripe checkout session ($29)
+- POST `/api/cases/:id/verify-payment` - Verify Stripe payment status
+- GET `/api/cases/:id/generate` - SSE stream for AI letter generation (requires payment)
 - POST `/api/cases/:id/sign` - Sign letter (custom Zod schema)
-- GET `/api/cases/:id/generate` - SSE stream for AI letter generation
 
 ## Running
 - `npm run dev` starts Express + Vite on port 5000
