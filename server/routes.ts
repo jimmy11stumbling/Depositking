@@ -221,6 +221,15 @@ export async function registerRoutes(
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
+  app.get("/api/cases", async (_req, res) => {
+    try {
+      const cases = await storage.getAllCases();
+      res.json(cases);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/cases/:id", async (req, res) => {
     try {
       const caseData = await resolveCase(req, res);
