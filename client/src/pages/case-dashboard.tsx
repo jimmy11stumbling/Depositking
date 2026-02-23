@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useLocation, useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -11,13 +11,48 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Shield, ArrowLeft, ArrowRight, AlertTriangle, CheckCircle2, Clock,
+  Shield, ArrowLeft, AlertTriangle, CheckCircle2, Clock,
   Scale, DollarSign, Plus, Trash2, FileText, Sparkles, CreditCard, Loader2,
-  Download, Printer, Eye,
+  Printer, Eye, Upload, BadgeCheck, Download, Mail, Gavel, Info,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-provider";
 import { usePageTitle } from "@/hooks/use-page-title";
+
+interface EvidenceItem {
+  id: number;
+  filename: string;
+  mimeType: string;
+  fileSize: number;
+  sha256Hash: string;
+  metadata: any;
+  description: string | null;
+  uploadedAt: string;
+}
+
+interface DeliveryItem {
+  id: number;
+  caseId: number;
+  provider: string;
+  externalId: string | null;
+  trackingNumber: string | null;
+  status: string;
+  recipientName: string | null;
+  recipientAddress: string | null;
+  certifiedMailNumber: string | null;
+  expectedDeliveryDate: string | null;
+  statusHistory: any;
+  createdAt: string;
+}
+
+interface CourtFormItem {
+  id: number;
+  caseId: number;
+  formType: string;
+  state: string;
+  formData: any;
+  generatedAt: string;
+}
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -35,12 +70,31 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function formatDateTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function CaseDashboard() {
   const params = useParams<{ id: string }>();
   const caseToken = params.id;
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [newDeduction, setNewDeduction] = useState({ description: "", amount: "", disputeReason: "" });
+  const [evidenceDescription, setEvidenceDescription] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: caseData, isLoading: caseLoading } = useQuery<Case>({
     queryKey: ["/api/cases", caseToken],
@@ -58,6 +112,23 @@ export default function CaseDashboard() {
   const { data: deductionsData, isLoading: deductionsLoading } = useQuery<Deduction[]>({
     queryKey: ["/api/cases", caseToken, "deductions"],
     enabled: !!caseData,
+  });
+
+  const { data: evidenceData } = useQuery<EvidenceItem[]>({
+    queryKey: ["/api/cases", caseToken, "evidence"],
+    enabled: !!caseData,
+  });
+
+  const isCaseFinalized = !!caseData && (caseData.status === "signed" || caseData.status === "delivered");
+
+  const { data: deliveriesData } = useQuery<DeliveryItem[]>({
+    queryKey: ["/api/cases", caseToken, "deliveries"],
+    enabled: isCaseFinalized,
+  });
+
+  const { data: courtFormsData } = useQuery<CourtFormItem[]>({
+    queryKey: ["/api/cases", caseToken, "court-forms"],
+    enabled: isCaseFinalized,
   });
 
   const addDeduction = useMutation({
@@ -88,6 +159,66 @@ export default function CaseDashboard() {
     },
   });
 
+  const uploadEvidence = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (evidenceDescription) formData.append("description", evidenceDescription);
+      const res = await fetch(`/api/cases/${caseToken}/evidence?token=${caseToken}`, { method: "POST", body: formData });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || res.statusText);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken, "evidence"] });
+      setEvidenceDescription("");
+      toast({ title: "Evidence Uploaded", description: "File has been securely stored." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Upload Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteEvidence = useMutation({
+    mutationFn: async (evidenceId: number) => {
+      await apiRequest("DELETE", `/api/cases/${caseToken}/evidence/${evidenceId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken, "evidence"] });
+      toast({ title: "Evidence Removed" });
+    },
+  });
+
+  const sendLetter = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/cases/${caseToken}/send-letter`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken, "deliveries"] });
+      toast({ title: "Letter Sent", description: "Your demand letter has been sent via USPS Certified Mail." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Send Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const prepareCourtForms = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/cases/${caseToken}/court-forms`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken, "court-forms"] });
+      toast({ title: "Court Forms Prepared", description: "Your small claims filing documents are ready." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Preparation Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const checkout = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/cases/${caseToken}/checkout`);
@@ -104,6 +235,43 @@ export default function CaseDashboard() {
       toast({ title: "Payment Error", description: err.message, variant: "destructive" });
     },
   });
+
+  const handleFileDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast({ title: "File Too Large", description: "Maximum file size is 10MB.", variant: "destructive" });
+        return;
+      }
+      const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/gif", "application/pdf"];
+      if (!allowed.includes(file.type)) {
+        toast({ title: "Invalid File Type", description: "Upload images (JPG, PNG, WebP, HEIC, GIF) or PDF documents.", variant: "destructive" });
+        return;
+      }
+      uploadEvidence.mutate(file);
+    }
+  }, [uploadEvidence, toast]);
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast({ title: "File Too Large", description: "Maximum file size is 10MB.", variant: "destructive" });
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+      const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/gif", "application/pdf"];
+      if (!allowed.includes(file.type)) {
+        toast({ title: "Invalid File Type", description: "Upload images (JPG, PNG, WebP, HEIC, GIF) or PDF documents.", variant: "destructive" });
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+      uploadEvidence.mutate(file);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [uploadEvidence, toast]);
 
   if (caseLoading || analysisLoading) {
     return (
@@ -143,6 +311,10 @@ export default function CaseDashboard() {
   const amountReturned = parseFloat(caseData.amountReturned || "0");
   const withheld = depositAmount - amountReturned;
   const deductions = deductionsData || [];
+  const evidenceList = evidenceData || [];
+  const deliveries = deliveriesData || [];
+  const courtForms = courtFormsData || [];
+  const breakdown = analysis.penaltyBreakdown;
 
   return (
     <div className="min-h-screen bg-background">
@@ -240,7 +412,35 @@ export default function CaseDashboard() {
             <p className="font-serif text-2xl sm:text-3xl font-bold text-[#C9A84C]" data-testid="text-total-recovery">
               {formatCurrency(analysis.totalPotentialRecovery)}
             </p>
-            <p className="text-xs text-white/60 mt-1">Fight for it</p>
+            {breakdown && breakdown.items.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <Separator className="bg-white/20" />
+                <div className="space-y-1.5">
+                  {breakdown.items.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between gap-2 text-sm" data-testid={`breakdown-item-${idx}`}>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-white/80">{item.label}</span>
+                        {item.description && (
+                          <p className="text-white/50 text-xs truncate">{item.description}</p>
+                        )}
+                      </div>
+                      <span className="font-medium text-[#C9A84C] whitespace-nowrap">{formatCurrency(item.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+                <Separator className="bg-white/20" />
+                <div className="flex items-center justify-between gap-2 text-sm font-bold">
+                  <span className="text-white">Total Recovery</span>
+                  <span className="text-[#C9A84C]">{formatCurrency(breakdown.totalPotentialRecovery)}</span>
+                </div>
+              </div>
+            )}
+            {stateLaw?.specialPenaltyRules && (
+              <div className="mt-3 flex items-start gap-2">
+                <Info className="h-3.5 w-3.5 text-[#C9A84C] flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-white/60">{stateLaw.specialPenaltyRules}</p>
+              </div>
+            )}
           </Card>
         </div>
 
@@ -323,6 +523,122 @@ export default function CaseDashboard() {
               Add Deduction
             </Button>
           </div>
+        </Card>
+
+        <Card className="p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <div className="flex items-center gap-2">
+              <Upload className="h-5 w-5 text-[#2E5FAA]" />
+              <h3 className="font-serif text-lg font-bold text-foreground">Evidence Vault</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              {evidenceList.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    window.open(`/api/cases/${caseToken}/evidence/manifest?token=${caseToken}`, "_blank");
+                  }}
+                  data-testid="button-download-manifest"
+                >
+                  <Download className="mr-1 h-4 w-4" />
+                  Manifest
+                </Button>
+              )}
+              <Badge variant="secondary">{evidenceList.length} file{evidenceList.length !== 1 ? "s" : ""}</Badge>
+            </div>
+          </div>
+
+          <div
+            className={`border-2 border-dashed rounded-md p-6 text-center transition-colors cursor-pointer ${
+              isDragging
+                ? "border-[#2E5FAA] bg-[#2E5FAA]/5 dark:bg-[#2E5FAA]/10"
+                : "border-muted-foreground/25 hover:border-[#2E5FAA]/50"
+            }`}
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleFileDrop}
+            onClick={() => fileInputRef.current?.click()}
+            data-testid="dropzone-evidence"
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/gif,application/pdf"
+              onChange={handleFileSelect}
+              data-testid="input-evidence-file"
+            />
+            {uploadEvidence.isPending ? (
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="h-8 w-8 text-[#2E5FAA] animate-spin" />
+                <p className="text-sm text-muted-foreground">Uploading...</p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <Upload className="h-8 w-8 text-muted-foreground" />
+                <p className="text-sm font-medium text-foreground">Drop files here or click to upload</p>
+                <p className="text-xs text-muted-foreground">Images (JPG, PNG, WebP, GIF, HEIC) or PDF — Max 10MB</p>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-3">
+            <Input
+              placeholder="Optional description for next upload"
+              value={evidenceDescription}
+              onChange={(e) => setEvidenceDescription(e.target.value)}
+              data-testid="input-evidence-description"
+            />
+          </div>
+
+          {evidenceList.length > 0 && (
+            <div className="mt-4 space-y-3">
+              <Separator />
+              {evidenceList.map((ev) => (
+                <div
+                  key={ev.id}
+                  className="flex items-center justify-between gap-3 p-3 rounded-md bg-card border"
+                  data-testid={`evidence-item-${ev.id}`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm text-foreground truncate">{ev.filename}</span>
+                      <Badge variant="secondary" className="text-xs">{formatFileSize(ev.fileSize)}</Badge>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <div className="flex items-center gap-1">
+                        <BadgeCheck className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                        <span className="text-xs font-mono text-muted-foreground">{ev.sha256Hash.substring(0, 12)}...</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{formatDateTime(ev.uploadedAt)}</span>
+                    </div>
+                    {ev.description && (
+                      <p className="text-xs text-muted-foreground mt-1 truncate">{ev.description}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={(e) => { e.stopPropagation(); window.open(`/api/cases/${caseToken}/evidence/${ev.id}/download`, "_blank"); }}
+                      data-testid={`button-download-evidence-${ev.id}`}
+                    >
+                      <Download className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={(e) => { e.stopPropagation(); deleteEvidence.mutate(ev.id); }}
+                      data-testid={`button-delete-evidence-${ev.id}`}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
 
         {caseData.status === "signed" ? (
@@ -430,6 +746,168 @@ export default function CaseDashboard() {
           </Card>
         )}
 
+        {isCaseFinalized && (
+          <Card className="p-5 sm:p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Mail className="h-5 w-5 text-[#2E5FAA]" />
+              <h3 className="font-serif text-lg font-bold text-foreground">Certified Mail Delivery</h3>
+            </div>
+
+            {deliveries.length === 0 ? (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <p className="text-sm text-muted-foreground">
+                  Send your signed demand letter via USPS Certified Mail for legal proof of delivery.
+                </p>
+                <Button
+                  onClick={() => sendLetter.mutate()}
+                  disabled={sendLetter.isPending}
+                  className="bg-[#2E5FAA] text-white whitespace-nowrap"
+                  data-testid="button-send-certified-mail"
+                >
+                  {sendLetter.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mail className="mr-2 h-4 w-4" />
+                  )}
+                  {sendLetter.isPending ? "Sending..." : "Send via USPS Certified Mail"}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {deliveries.map((del) => (
+                  <div key={del.id} className="p-4 rounded-md bg-card border space-y-2" data-testid={`delivery-item-${del.id}`}>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={del.status === "delivered" ? "default" : "secondary"}
+                          className={del.status === "delivered" ? "bg-green-600 text-white" : ""}
+                          data-testid={`delivery-status-${del.id}`}
+                        >
+                          {del.status.charAt(0).toUpperCase() + del.status.slice(1)}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">{del.provider.toUpperCase()}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{formatDateTime(del.createdAt)}</span>
+                    </div>
+                    {del.trackingNumber && (
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Tracking: </span>
+                        <span className="font-mono font-medium text-foreground" data-testid={`delivery-tracking-${del.id}`}>{del.trackingNumber}</span>
+                      </div>
+                    )}
+                    {del.certifiedMailNumber && (
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Certified Mail #: </span>
+                        <span className="font-mono font-medium text-foreground">{del.certifiedMailNumber}</span>
+                      </div>
+                    )}
+                    {del.expectedDeliveryDate && (
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Expected Delivery: </span>
+                        <span className="font-medium text-foreground" data-testid={`delivery-expected-${del.id}`}>{formatDate(del.expectedDeliveryDate)}</span>
+                      </div>
+                    )}
+                    {del.recipientName && (
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Recipient: </span>
+                        <span className="text-foreground">{del.recipientName}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        )}
+
+        {isCaseFinalized && (
+          <Card className="p-5 sm:p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Gavel className="h-5 w-5 text-[#2E5FAA]" />
+              <h3 className="font-serif text-lg font-bold text-foreground">Small Claims Court Filing</h3>
+            </div>
+
+            {courtForms.length === 0 ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                  {stateLaw?.smallClaimsCourtName && (
+                    <div>
+                      <span className="text-xs text-muted-foreground block">Court</span>
+                      <span className="font-medium text-foreground">{stateLaw.smallClaimsCourtName}</span>
+                    </div>
+                  )}
+                  {stateLaw?.smallClaimsFilingFee != null && (
+                    <div>
+                      <span className="text-xs text-muted-foreground block">Filing Fee</span>
+                      <span className="font-medium text-foreground">{formatCurrency(stateLaw.smallClaimsFilingFee)}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Max Claim Amount</span>
+                    <span className="font-medium text-foreground">{formatCurrency(stateLaw?.smallClaimsLimit || 0)}</span>
+                  </div>
+                </div>
+                <Separator />
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <p className="text-sm text-muted-foreground">
+                    Generate pre-filled small claims court forms for your state.
+                  </p>
+                  <Button
+                    onClick={() => prepareCourtForms.mutate()}
+                    disabled={prepareCourtForms.isPending}
+                    className="bg-[#2E5FAA] text-white whitespace-nowrap"
+                    data-testid="button-prepare-court-forms"
+                  >
+                    {prepareCourtForms.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Gavel className="mr-2 h-4 w-4" />
+                    )}
+                    {prepareCourtForms.isPending ? "Preparing..." : "Prepare Small Claims Filing"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {courtForms.map((form) => (
+                  <div key={form.id} className="p-4 rounded-md bg-card border space-y-3" data-testid={`court-form-${form.id}`}>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">{form.formType}</Badge>
+                        <span className="text-sm font-medium text-foreground">{form.state}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{formatDateTime(form.generatedAt)}</span>
+                    </div>
+                    {form.formData && typeof form.formData === "object" && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                        {Object.entries(form.formData as Record<string, any>).map(([key, value]) => (
+                          <div key={key}>
+                            <span className="text-xs text-muted-foreground block">
+                              {key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+                            </span>
+                            <span className="font-medium text-foreground text-sm">
+                              {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {stateLaw && (
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t flex-wrap">
+                        <span>{stateLaw.smallClaimsCourtName}</span>
+                        {stateLaw.smallClaimsFilingFee != null && (
+                          <span>Filing Fee: {formatCurrency(stateLaw.smallClaimsFilingFee)}</span>
+                        )}
+                        <span>Max: {formatCurrency(stateLaw.smallClaimsLimit)}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        )}
+
         <Card className="p-4">
           <h4 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
             <Scale className="h-4 w-4" />
@@ -453,6 +931,34 @@ export default function CaseDashboard() {
               <span className="font-medium">{formatCurrency(stateLaw?.smallClaimsLimit || 0)}</span>
             </div>
           </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mt-3">
+            <div>
+              <span className="text-xs text-muted-foreground block">Court Name</span>
+              <span className="font-medium">{stateLaw?.smallClaimsCourtName || "N/A"}</span>
+            </div>
+            <div>
+              <span className="text-xs text-muted-foreground block">Filing Fee</span>
+              <span className="font-medium">{stateLaw?.smallClaimsFilingFee != null ? formatCurrency(stateLaw.smallClaimsFilingFee) : "N/A"}</span>
+            </div>
+            <div>
+              <span className="text-xs text-muted-foreground block">Interest Rate</span>
+              <span className="font-medium">
+                {stateLaw?.interestRate != null ? `${stateLaw.interestRate}% (${stateLaw.interestType})` : "None"}
+              </span>
+            </div>
+            <div>
+              <span className="text-xs text-muted-foreground block">Bad Faith Fee</span>
+              <span className="font-medium">
+                {stateLaw?.badFaithFlatFee != null ? formatCurrency(stateLaw.badFaithFlatFee) : stateLaw?.badFaithPenalty ? "Yes (see penalty)" : "None"}
+              </span>
+            </div>
+          </div>
+          {stateLaw?.specialPenaltyRules && (
+            <div className="mt-3 pt-3 border-t">
+              <span className="text-xs text-muted-foreground block mb-1">Special Penalty Rules</span>
+              <p className="text-sm font-medium text-foreground">{stateLaw.specialPenaltyRules}</p>
+            </div>
+          )}
           {stateLaw?.notes && (
             <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">{stateLaw.notes}</p>
           )}

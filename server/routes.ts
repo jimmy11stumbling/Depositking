@@ -9,6 +9,21 @@ import { z } from "zod";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
+import multer from "multer";
+import crypto from "crypto";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf", "image/gif"];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("File type not allowed. Upload images (JPG, PNG, WebP, HEIC, GIF) or PDF documents."));
+    }
+  },
+});
 
 async function resolveCase(req: Request, _res: Response) {
   const param = req.params.id as string;
@@ -73,7 +88,7 @@ async function ensureStripeProduct(): Promise<void> {
   }
 }
 
-function calculateAnalysis(stateAbbr: string, moveOutDate: string, depositAmount: number, amountReturned: number) {
+function calculateAnalysis(stateAbbr: string, moveOutDate: string, depositAmount: number, amountReturned: number, tenancyStart?: string | null) {
   const law = STATE_LAWS[stateAbbr];
   if (!law) return null;
 
@@ -88,22 +103,71 @@ function calculateAnalysis(stateAbbr: string, moveOutDate: string, depositAmount
 
   const depositWithheld = depositAmount - amountReturned;
 
+  const breakdownItems: { label: string; amount: number; description: string }[] = [];
+  breakdownItems.push({ label: "Deposit Withheld", amount: depositWithheld, description: "Amount not returned by landlord" });
+
   let penaltyAmount = 0;
+  let penaltyDescription = "";
   if (isLate) {
     if (law.penaltyType === "multiplier" && law.penaltyMultiplier) {
       penaltyAmount = depositWithheld * law.penaltyMultiplier;
+      penaltyDescription = `${law.penaltyMultiplier}x statutory damages under ${law.citation}`;
+      breakdownItems.push({ label: `${law.penaltyMultiplier}x Penalty`, amount: penaltyAmount, description: penaltyDescription });
     } else if (law.penaltyType === "flat" && law.penaltyFlatFee) {
       penaltyAmount = law.penaltyFlatFee;
+      penaltyDescription = `$${law.penaltyFlatFee} statutory penalty under ${law.citation}`;
+      breakdownItems.push({ label: "Flat Penalty", amount: penaltyAmount, description: penaltyDescription });
     }
   }
+
+  let badFaithFee = 0;
+  let badFaithDescription = "";
+  if (isLate && law.badFaithFlatFee) {
+    badFaithFee = law.badFaithFlatFee;
+    badFaithDescription = `$${law.badFaithFlatFee} bad faith flat fee under ${law.citation}`;
+    breakdownItems.push({ label: "Bad Faith Fee", amount: badFaithFee, description: badFaithDescription });
+  }
+
+  let interestAmount = 0;
+  let interestDescription = "";
+  if (law.interestRate && law.interestType !== "none" && tenancyStart) {
+    const start = new Date(tenancyStart);
+    const yearsHeld = Math.max(0, (moveOut.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+    if (yearsHeld >= 1) {
+      if (law.interestType === "simple") {
+        interestAmount = depositAmount * (law.interestRate / 100) * yearsHeld;
+      } else if (law.interestType === "compound") {
+        interestAmount = depositAmount * (Math.pow(1 + law.interestRate / 100, yearsHeld) - 1);
+      }
+      interestAmount = Math.round(interestAmount * 100) / 100;
+      interestDescription = `${law.interestRate}% ${law.interestType} interest over ${yearsHeld.toFixed(1)} years`;
+      breakdownItems.push({ label: "Accrued Interest", amount: interestAmount, description: interestDescription });
+    }
+  }
+
+  const totalPotentialRecovery = depositWithheld + penaltyAmount + badFaithFee + interestAmount;
+
+  const penaltyBreakdown = {
+    depositWithheld,
+    baseDeposit: depositWithheld,
+    penaltyAmount,
+    penaltyDescription,
+    interestAmount,
+    interestDescription,
+    badFaithFlatFee: badFaithFee,
+    badFaithDescription,
+    totalPotentialRecovery,
+    items: breakdownItems,
+  };
 
   return {
     isLate,
     daysPastDeadline: Math.max(0, daysPastDeadline),
     deadlineDate: deadlineDate.toISOString().split("T")[0],
     depositWithheld,
-    penaltyAmount,
-    totalPotentialRecovery: depositWithheld + penaltyAmount,
+    penaltyAmount: penaltyAmount + badFaithFee + interestAmount,
+    totalPotentialRecovery,
+    penaltyBreakdown,
     stateLaw: law,
   };
 }
@@ -160,7 +224,8 @@ export async function registerRoutes(
         newCase.state,
         newCase.moveOutDate,
         parseFloat(newCase.depositAmount),
-        parseFloat(newCase.amountReturned || "0")
+        parseFloat(newCase.amountReturned || "0"),
+        newCase.tenancyStart
       );
 
       if (analysis) {
@@ -187,7 +252,8 @@ export async function registerRoutes(
         caseData.state,
         caseData.moveOutDate,
         parseFloat(caseData.depositAmount),
-        parseFloat(caseData.amountReturned || "0")
+        parseFloat(caseData.amountReturned || "0"),
+        caseData.tenancyStart
       );
 
       if (!analysis) return res.status(400).json({ error: "Invalid state" });
@@ -300,7 +366,7 @@ export async function registerRoutes(
       const amountReturned = parseFloat(caseData.amountReturned || "0");
       const withheldAmount = depositAmount - amountReturned;
 
-      const analysis = calculateAnalysis(caseData.state, caseData.moveOutDate, depositAmount, amountReturned);
+      const analysis = calculateAnalysis(caseData.state, caseData.moveOutDate, depositAmount, amountReturned, caseData.tenancyStart);
       if (!analysis) {
         send({ status: "error", message: "Analysis failed" });
         res.end();
@@ -647,6 +713,311 @@ export async function registerRoutes(
       res.json({ paid: false });
     } catch (err: any) {
       console.error("Verify payment error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/cases/:id/evidence", upload.single("file"), async (req: any, res) => {
+    try {
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const file = req.file as Express.Multer.File;
+      const sha256Hash = crypto.createHash("sha256").update(file.buffer).digest("hex");
+      const fileData = file.buffer.toString("base64");
+
+      const metadata: Record<string, any> = {
+        originalName: file.originalname,
+        size: file.size,
+        mimeType: file.mimetype,
+        uploadTimestamp: new Date().toISOString(),
+        hashAlgorithm: "SHA-256",
+      };
+
+      const ev = await storage.createEvidence({
+        caseId: caseData.id,
+        filename: file.originalname,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+        sha256Hash,
+        fileData,
+        metadata,
+        description: req.body.description || null,
+      });
+
+      res.status(201).json({
+        id: ev.id,
+        filename: ev.filename,
+        mimeType: ev.mimeType,
+        fileSize: ev.fileSize,
+        sha256Hash: ev.sha256Hash,
+        metadata: ev.metadata,
+        description: ev.description,
+        uploadedAt: ev.uploadedAt,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/cases/:id/evidence", async (req, res) => {
+    try {
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      const items = await storage.getEvidenceByCase(caseData.id);
+      res.json(items.map(e => ({
+        id: e.id,
+        filename: e.filename,
+        mimeType: e.mimeType,
+        fileSize: e.fileSize,
+        sha256Hash: e.sha256Hash,
+        metadata: e.metadata,
+        description: e.description,
+        uploadedAt: e.uploadedAt,
+      })));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/cases/:id/evidence/:evidenceId/download", async (req, res) => {
+    try {
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      const evidenceId = parseInt(req.params.evidenceId);
+      const ev = await storage.getEvidence(evidenceId);
+      if (!ev || ev.caseId !== caseData.id) return res.status(404).json({ error: "Evidence not found" });
+      const buffer = Buffer.from(ev.fileData, "base64");
+      res.setHeader("Content-Type", ev.mimeType);
+      res.setHeader("Content-Disposition", `inline; filename="${ev.filename}"`);
+      res.send(buffer);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/cases/:id/evidence/:evidenceId", async (req, res) => {
+    try {
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      if (caseData.status === "signed") return res.status(400).json({ error: "Cannot modify evidence on a signed case" });
+      const evidenceId = parseInt(req.params.evidenceId);
+      const ev = await storage.getEvidence(evidenceId);
+      if (!ev || ev.caseId !== caseData.id) return res.status(404).json({ error: "Evidence not found" });
+      await storage.deleteEvidence(evidenceId);
+      res.status(204).send();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/cases/:id/evidence/manifest", async (req, res) => {
+    try {
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      const items = await storage.getEvidenceByCase(caseData.id);
+
+      const manifest = {
+        caseId: caseData.id,
+        generatedAt: new Date().toISOString(),
+        hashAlgorithm: "SHA-256",
+        evidenceCount: items.length,
+        items: items.map(e => ({
+          filename: e.filename,
+          sha256Hash: e.sha256Hash,
+          fileSize: e.fileSize,
+          mimeType: e.mimeType,
+          uploadedAt: e.uploadedAt,
+          description: e.description,
+        })),
+        manifestHash: crypto.createHash("sha256").update(
+          items.map(e => e.sha256Hash).sort().join("")
+        ).digest("hex"),
+      };
+
+      res.json(manifest);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/cases/:id/send-letter", async (req, res) => {
+    try {
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      if (caseData.status !== "signed") return res.status(400).json({ error: "Letter must be signed before sending" });
+      if (!caseData.paid) return res.status(403).json({ error: "Payment required" });
+
+      const existingDeliveries = await storage.getDeliveriesByCase(caseData.id);
+      if (existingDeliveries.length > 0) {
+        return res.status(400).json({ error: "Letter has already been sent", delivery: existingDeliveries[0] });
+      }
+
+      const lobApiKey = process.env.LOB_API_KEY;
+      if (!lobApiKey) {
+        return res.status(503).json({ error: "Certified mail service not configured. Please set up your Lob API key." });
+      }
+
+      const letter = await storage.getLetterByCase(caseData.id);
+      if (!letter || !letter.finalHtml) {
+        return res.status(400).json({ error: "No letter content found" });
+      }
+
+      const signature = await storage.getSignatureByCase(caseData.id);
+
+      const lobResponse = await fetch("https://api.lob.com/v1/letters", {
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${Buffer.from(lobApiKey + ":").toString("base64")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          description: `Demand Letter - Case #${caseData.id}`,
+          to: {
+            name: caseData.landlordName,
+            address_line1: caseData.landlordAddress?.split("\n")[0] || "",
+            address_city: caseData.landlordAddress?.split(",")[1]?.trim()?.split(" ")[0] || "",
+            address_state: caseData.state,
+            address_zip: caseData.landlordAddress?.match(/\d{5}(-\d{4})?/)?.[0] || "",
+          },
+          from: {
+            name: caseData.tenantName,
+            address_line1: caseData.tenantAddress?.split("\n")[0] || "",
+            address_city: caseData.tenantAddress?.split(",")[1]?.trim()?.split(" ")[0] || "",
+            address_state: caseData.state,
+            address_zip: caseData.tenantAddress?.match(/\d{5}(-\d{4})?/)?.[0] || "",
+          },
+          file: `<html><body style="font-family:serif;font-size:12pt;line-height:1.6;margin:1in">${letter.finalHtml}${signature ? `<p style="margin-top:40px"><img src="${signature.signatureBase64}" style="max-height:60px" /></p>` : ""}</body></html>`,
+          color: false,
+          mail_type: "usps_standard",
+          extra_service: "certified",
+          return_envelope: false,
+        }),
+      });
+
+      if (!lobResponse.ok) {
+        const errorData = await lobResponse.json().catch(() => ({ error: { message: "Unknown Lob error" } }));
+        console.error("Lob API error:", errorData);
+        return res.status(502).json({ error: `Mail service error: ${errorData?.error?.message || "Unknown error"}` });
+      }
+
+      const lobData = await lobResponse.json();
+
+      const delivery = await storage.createDelivery({
+        caseId: caseData.id,
+        provider: "lob",
+        externalId: lobData.id,
+        trackingNumber: lobData.tracking_number || null,
+        status: "processing",
+        recipientName: caseData.landlordName,
+        recipientAddress: caseData.landlordAddress,
+        senderName: caseData.tenantName,
+        senderAddress: caseData.tenantAddress,
+        certifiedMailNumber: lobData.tracking_number || null,
+        expectedDeliveryDate: lobData.expected_delivery_date || null,
+        statusHistory: [{ status: "processing", timestamp: new Date().toISOString(), detail: "Letter submitted to Lob for printing and mailing" }],
+      });
+
+      await storage.updateCase(caseData.id, {
+        letterSentAt: new Date(),
+        letterSentMethod: "usps_certified",
+      });
+
+      res.status(201).json(delivery);
+    } catch (err: any) {
+      console.error("Send letter error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/cases/:id/deliveries", async (req, res) => {
+    try {
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      const items = await storage.getDeliveriesByCase(caseData.id);
+      res.json(items);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/cases/:id/court-forms", async (req, res) => {
+    try {
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+
+      if (caseData.status !== "signed") {
+        return res.status(400).json({ error: "Letter must be signed before generating court forms" });
+      }
+
+      const law = STATE_LAWS[caseData.state];
+      if (!law) return res.status(400).json({ error: "State not found" });
+
+      const depositAmount = parseFloat(caseData.depositAmount);
+      const amountReturned = parseFloat(caseData.amountReturned || "0");
+      const analysis = calculateAnalysis(caseData.state, caseData.moveOutDate, depositAmount, amountReturned, caseData.tenancyStart);
+      const deductionsList = await storage.getDeductionsByCase(caseData.id);
+
+      const formData = {
+        courtName: law.smallClaimsCourtName,
+        filingFee: law.smallClaimsFilingFee,
+        maxClaimAmount: law.smallClaimsLimit,
+
+        plaintiffName: caseData.tenantName || "",
+        plaintiffAddress: caseData.tenantAddress || "",
+        plaintiffPhone: "",
+
+        defendantName: caseData.landlordName || "",
+        defendantAddress: caseData.landlordAddress || "",
+
+        claimAmount: analysis?.totalPotentialRecovery || depositAmount,
+        claimDescription: `Recovery of security deposit wrongfully withheld. Deposit of $${depositAmount.toFixed(2)} paid for rental at ${caseData.propertyAddress || "property address"}. Moved out on ${new Date(caseData.moveOutDate).toLocaleDateString("en-US")}. ${analysis?.isLate ? `Landlord missed the ${law.returnDeadlineDays}-day statutory deadline by ${analysis.daysPastDeadline} days.` : ""} Amount returned: $${amountReturned.toFixed(2)}. Amount withheld: $${(depositAmount - amountReturned).toFixed(2)}. ${analysis?.penaltyBreakdown ? `Statutory penalties: ${analysis.penaltyBreakdown.items.filter(i => i.label !== "Deposit Withheld").map(i => `${i.label}: $${i.amount.toFixed(2)}`).join(", ")}` : ""}`,
+
+        statutoryBasis: law.citation,
+        specialPenaltyRules: law.specialPenaltyRules || null,
+
+        propertyAddress: caseData.propertyAddress || "",
+        moveOutDate: caseData.moveOutDate,
+        depositAmount: depositAmount.toFixed(2),
+        amountReturned: amountReturned.toFixed(2),
+        amountWithheld: (depositAmount - amountReturned).toFixed(2),
+        daysPastDeadline: analysis?.daysPastDeadline || 0,
+
+        deductions: deductionsList.map(d => ({
+          description: d.description,
+          amount: d.amount,
+          disputeReason: d.disputeReason,
+        })),
+
+        penaltyBreakdown: analysis?.penaltyBreakdown || null,
+
+        filingInstructions: `File this claim at your local ${law.smallClaimsCourtName}. The filing fee is approximately $${law.smallClaimsFilingFee || "varies"}. The small claims limit in ${law.state} is $${law.smallClaimsLimit.toLocaleString()}. Bring a copy of your demand letter, lease agreement, and all evidence from your Evidence Vault.`,
+      };
+
+      const courtForm = await storage.createCourtForm({
+        caseId: caseData.id,
+        formType: "small_claims_statement",
+        state: caseData.state,
+        formData,
+      });
+
+      res.status(201).json(courtForm);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/cases/:id/court-forms", async (req, res) => {
+    try {
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      const forms = await storage.getCourtFormsByCase(caseData.id);
+      res.json(forms);
+    } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });

@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import {
   Shield, Scale, FileText, Clock, ArrowRight, CheckCircle2, AlertTriangle,
   Zap, Users, MapPin, DollarSign, TrendingUp, Gavel, BadgeCheck, ChevronDown,
+  Lock, Mail, Briefcase, Camera,
 } from "lucide-react";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "@/components/theme-provider";
@@ -574,25 +575,27 @@ export default function LandingPage() {
           >
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-medium text-muted-foreground mb-4">
               <BadgeCheck className="h-3 w-3" />
-              Your AI Legal Team
+              All-In-One Solution
             </div>
             <h2 className="font-serif text-3xl sm:text-4xl font-bold text-foreground mb-3">
-              4 AI Agents Working Your Case
+              Everything You Need for $29
             </h2>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              Each agent specializes in one part of the legal process — just like a real law firm.
+              From evidence collection through court-ready filings — no other service covers this much.
             </p>
           </motion.div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {[
-              { role: "Paralegal Researcher", desc: "Verifies your state's exact statute, deadlines, and penalty structure against current law.", color: "from-blue-600 to-blue-700" },
-              { role: "Strategy Attorney", desc: "Assesses case strength, identifies violations, and calculates your total potential recovery.", color: "from-[#1E3A5F] to-[#2E5FAA]" },
-              { role: "Demand Letter Drafter", desc: "Writes a professional, legally precise demand letter citing specific statutes and penalties.", color: "from-[#C9A84C] to-amber-600" },
-              { role: "Quality Reviewer", desc: "Reviews the letter for accuracy, tone, and legal soundness before you sign.", color: "from-green-600 to-green-700" },
-            ].map((agent, i) => (
+              { icon: Scale, title: "4-Agent AI Legal Team", desc: "Paralegal, Attorney, Drafter, and Reviewer work together like a real law firm to build your strongest case.", color: "from-[#1E3A5F] to-[#2E5FAA]" },
+              { icon: Camera, title: "Evidence Vault", desc: "Upload photos and documents. Each file is SHA-256 hashed with timestamps — tamper-proof evidence your landlord can't dispute.", color: "from-blue-600 to-blue-700" },
+              { icon: MapPin, title: "50-State Statutory Database", desc: "Exact deadlines, penalty multipliers, interest rates, and special rules for every state — automatically applied to your case.", color: "from-[#C9A84C] to-amber-600" },
+              { icon: Mail, title: "USPS Certified Mail", desc: "Send your demand letter via certified mail with tracking and delivery confirmation — all from your dashboard.", color: "from-green-600 to-green-700" },
+              { icon: Lock, title: "Electronic Signature", desc: "Sign your letter digitally with a legally binding electronic signature. Edit before signing if needed.", color: "from-purple-600 to-purple-700" },
+              { icon: Briefcase, title: "Small Claims Court Prep", desc: "If your landlord doesn't respond, we auto-populate court filing forms with your case data so you're ready to sue.", color: "from-red-500 to-red-600" },
+            ].map((item, i) => (
               <motion.div
-                key={agent.role}
+                key={item.title}
                 initial="hidden"
                 whileInView="visible"
                 viewport={{ once: true, margin: "-50px" }}
@@ -600,9 +603,15 @@ export default function LandingPage() {
                 custom={i}
               >
                 <Card className="p-5 h-full hover-elevate">
-                  <div className={`w-full h-1.5 rounded-full bg-gradient-to-r ${agent.color} mb-4`} />
-                  <h3 className="font-semibold text-foreground text-sm mb-2">{agent.role}</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{agent.desc}</p>
+                  <div className="flex items-start gap-4">
+                    <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${item.color} flex items-center justify-center flex-shrink-0`}>
+                      <item.icon className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-foreground text-sm mb-1.5">{item.title}</h3>
+                      <p className="text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
+                    </div>
+                  </div>
                 </Card>
               </motion.div>
             ))}
@@ -647,10 +656,11 @@ export default function LandingPage() {
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
-          <div className="flex items-center justify-center gap-6 mt-8 text-sm text-white/50">
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 mt-8 text-sm text-white/50">
             <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" /> Free analysis</span>
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" /> 50-state coverage</span>
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" /> Editable letters</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" /> Evidence vault</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" /> Certified mail</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" /> Court prep</span>
           </div>
         </motion.div>
       </section>
