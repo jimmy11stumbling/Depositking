@@ -590,7 +590,7 @@ export default function LandingPage() {
               { icon: Scale, title: "4-Agent AI Legal Team", desc: "Paralegal, Attorney, Drafter, and Reviewer work together like a real law firm to build your strongest case.", color: "from-[#1E3A5F] to-[#2E5FAA]" },
               { icon: Camera, title: "Evidence Vault", desc: "Upload photos and documents. Each file is SHA-256 hashed with timestamps — tamper-proof evidence your landlord can't dispute.", color: "from-blue-600 to-blue-700" },
               { icon: MapPin, title: "50-State Statutory Database", desc: "Exact deadlines, penalty multipliers, interest rates, and special rules for every state — automatically applied to your case.", color: "from-[#C9A84C] to-amber-600" },
-              { icon: Mail, title: "USPS Certified Mail", desc: "Send your demand letter via certified mail with tracking and delivery confirmation — all from your dashboard.", color: "from-green-600 to-green-700" },
+              { icon: Mail, title: "USPS Certified Mail (+$12)", desc: "We print, mail, and track your demand letter via USPS Certified Mail with delivery confirmation — all handled for you.", color: "from-green-600 to-green-700" },
               { icon: Lock, title: "Electronic Signature", desc: "Sign your letter digitally with a legally binding electronic signature. Edit before signing if needed.", color: "from-purple-600 to-purple-700" },
               { icon: Briefcase, title: "Small Claims Court Prep", desc: "If your landlord doesn't respond, we auto-populate court filing forms with your case data so you're ready to sue.", color: "from-red-500 to-red-600" },
             ].map((item, i) => (

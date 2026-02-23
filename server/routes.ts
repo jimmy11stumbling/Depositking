@@ -55,36 +55,74 @@ async function ensureStripeProduct(): Promise<void> {
 
     if (priceResult.rows.length > 0) {
       console.log("Stripe product verified:", priceResult.rows[0].price_id);
-      return;
-    }
+    } else {
+      console.log("Demand Letter product not found, creating...");
+      const stripe = await getUncachableStripeClient();
 
-    console.log("Demand Letter product not found, creating...");
-    const stripe = await getUncachableStripeClient();
+      const existing = await stripe.products.search({ query: "name:'Demand Letter'" });
+      if (existing.data.length > 0) {
+        const prices = await stripe.prices.list({ product: existing.data[0].id, active: true });
+        if (prices.data.length > 0) {
+          console.log("Stripe product exists externally, will sync shortly:", existing.data[0].id);
+        }
+      } else {
+        const product = await stripe.products.create({
+          name: "Demand Letter",
+          description: "AI-generated demand letter for security deposit recovery. Includes 4-agent legal analysis, violation detection, penalty calculation, and professionally drafted demand letter with electronic signature.",
+          metadata: { type: "one_time", category: "legal_service" },
+        });
 
-    const existing = await stripe.products.search({ query: "name:'Demand Letter'" });
-    if (existing.data.length > 0) {
-      const prices = await stripe.prices.list({ product: existing.data[0].id, active: true });
-      if (prices.data.length > 0) {
-        console.log("Stripe product exists externally, will sync shortly:", existing.data[0].id);
-        return;
+        await stripe.prices.create({
+          product: product.id,
+          unit_amount: 2900,
+          currency: "usd",
+        });
+
+        console.log("Stripe product auto-created:", product.id);
       }
     }
-
-    const product = await stripe.products.create({
-      name: "Demand Letter",
-      description: "AI-generated demand letter for security deposit recovery. Includes 4-agent legal analysis, violation detection, penalty calculation, and professionally drafted demand letter with electronic signature.",
-      metadata: { type: "one_time", category: "legal_service" },
-    });
-
-    await stripe.prices.create({
-      product: product.id,
-      unit_amount: 2900,
-      currency: "usd",
-    });
-
-    console.log("Stripe product auto-created:", product.id);
   } catch (err: any) {
     console.error("Auto-seed Stripe product failed (non-fatal):", err.message);
+  }
+
+  try {
+    const mailPriceResult = await db.execute(
+      sql`SELECT pr.id as price_id FROM stripe.products p 
+          JOIN stripe.prices pr ON pr.product = p.id 
+          WHERE p.name = 'Certified Mail Delivery' AND pr.active = true 
+          LIMIT 1`
+    );
+
+    if (mailPriceResult.rows.length > 0) {
+      console.log("Certified Mail product verified:", mailPriceResult.rows[0].price_id);
+    } else {
+      console.log("Certified Mail product not found, creating...");
+      const stripe = await getUncachableStripeClient();
+
+      const existingMail = await stripe.products.search({ query: "name:'Certified Mail Delivery'" });
+      if (existingMail.data.length > 0) {
+        const prices = await stripe.prices.list({ product: existingMail.data[0].id, active: true });
+        if (prices.data.length > 0) {
+          console.log("Certified Mail product exists externally:", existingMail.data[0].id);
+        }
+      } else {
+        const mailProduct = await stripe.products.create({
+          name: "Certified Mail Delivery",
+          description: "USPS Certified Mail delivery of your demand letter with tracking and delivery confirmation. Includes printing, postage, and certified mail receipt.",
+          metadata: { type: "one_time", category: "mail_service" },
+        });
+
+        await stripe.prices.create({
+          product: mailProduct.id,
+          unit_amount: 1200,
+          currency: "usd",
+        });
+
+        console.log("Certified Mail product auto-created:", mailProduct.id);
+      }
+    }
+  } catch (err: any) {
+    console.error("Auto-seed Certified Mail product failed (non-fatal):", err.message);
   }
 }
 
@@ -717,6 +755,80 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/cases/:id/mail-checkout", async (req, res) => {
+    try {
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      if (caseData.status !== "signed") return res.status(400).json({ error: "Letter must be signed first" });
+      if (caseData.mailPaid) return res.json({ alreadyPaid: true });
+
+      const stripe = await getUncachableStripeClient();
+
+      const priceResult = await db.execute(
+        sql`SELECT pr.id as price_id FROM stripe.products p 
+            JOIN stripe.prices pr ON pr.product = p.id 
+            WHERE p.name = 'Certified Mail Delivery' AND pr.active = true 
+            LIMIT 1`
+      );
+
+      if (!priceResult.rows.length) {
+        return res.status(500).json({ error: "Mail product not configured" });
+      }
+
+      const priceId = priceResult.rows[0].price_id as string;
+      const host = req.get('host');
+      const protocol = req.protocol;
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [{ price: priceId, quantity: 1 }],
+        mode: 'payment',
+        success_url: `${protocol}://${host}/cases/${caseData.accessToken}?mail_session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${protocol}://${host}/cases/${caseData.accessToken}`,
+        metadata: { caseId: caseData.id.toString(), type: "certified_mail" },
+      });
+
+      await storage.updateCase(caseData.id, { mailStripeSessionId: session.id });
+
+      res.json({ url: session.url });
+    } catch (err: any) {
+      console.error("Mail checkout error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/cases/:id/verify-mail-payment", async (req, res) => {
+    try {
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      const { sessionId } = req.body;
+      if (caseData.mailPaid) return res.json({ paid: true });
+
+      if (!sessionId) return res.json({ paid: false });
+
+      if (caseData.mailStripeSessionId && caseData.mailStripeSessionId !== sessionId) {
+        return res.status(403).json({ error: "Session does not match this case" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      if (session.metadata?.caseId !== caseData.id.toString()) {
+        return res.status(403).json({ error: "Session does not belong to this case" });
+      }
+
+      if (session.payment_status === 'paid') {
+        await storage.updateCase(caseData.id, { mailPaid: true, mailStripeSessionId: sessionId });
+        return res.json({ paid: true });
+      }
+
+      res.json({ paid: false });
+    } catch (err: any) {
+      console.error("Verify mail payment error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/cases/:id/evidence", upload.single("file"), async (req: any, res) => {
     try {
       const caseData = await resolveCase(req, res);
@@ -851,6 +963,7 @@ export async function registerRoutes(
       if (!caseData) return res.status(404).json({ error: "Case not found" });
       if (caseData.status !== "signed") return res.status(400).json({ error: "Letter must be signed before sending" });
       if (!caseData.paid) return res.status(403).json({ error: "Payment required" });
+      if (!caseData.mailPaid) return res.status(403).json({ error: "Certified mail payment required. Pay $12 to send via USPS Certified Mail." });
 
       const existingDeliveries = await storage.getDeliveriesByCase(caseData.id);
       if (existingDeliveries.length > 0) {

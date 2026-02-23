@@ -39,7 +39,7 @@ AI-powered legal technology platform that helps residential tenants recover secu
 ## Features
 - **Evidence Vault**: SHA-256 hashed file uploads (images + PDF, 10MB max), tamper-proof manifest download
 - **Enhanced Penalty Calculator**: Interest calculations (simple/compound), bad faith flat fees, special penalty rules (TX $100+3x)
-- **Certified Mail**: USPS certified mail delivery via Lob.com API with tracking
+- **Certified Mail**: USPS certified mail delivery via Lob.com API with tracking ($12 add-on via Stripe)
 - **Court Forms**: Auto-populated small claims court filing data from case info
 - **PDF Download**: Signed demand letters can be downloaded as PDF via html2canvas + jsPDF
 - **Dark Mode**: Class-based dark mode with ThemeProvider, localStorage persistence, system preference detection
@@ -67,7 +67,9 @@ AI-powered legal technology platform that helps residential tenants recover secu
 - GET `/api/cases/:id/evidence/:evidenceId/download` - Download evidence file
 - DELETE `/api/cases/:id/evidence/:evidenceId` - Delete evidence file
 - GET `/api/cases/:id/evidence/manifest` - Download evidence manifest (SHA-256 chain)
-- POST `/api/cases/:id/send-letter` - Send via USPS certified mail (Lob API)
+- POST `/api/cases/:id/mail-checkout` - Create Stripe checkout for certified mail ($12)
+- POST `/api/cases/:id/verify-mail-payment` - Verify certified mail payment status
+- POST `/api/cases/:id/send-letter` - Send via USPS certified mail (requires mailPaid, Lob API)
 - GET `/api/cases/:id/deliveries` - Get delivery tracking info
 - POST `/api/cases/:id/court-forms` - Generate small claims court filing data
 - GET `/api/cases/:id/court-forms` - Get generated court forms

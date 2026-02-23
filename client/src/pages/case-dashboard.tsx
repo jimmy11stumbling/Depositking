@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useLocation, useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -235,6 +235,41 @@ export default function CaseDashboard() {
       toast({ title: "Payment Error", description: err.message, variant: "destructive" });
     },
   });
+
+  const mailCheckout = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/cases/${caseToken}/mail-checkout`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.alreadyPaid) {
+        queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken] });
+        toast({ title: "Already Paid", description: "Certified mail payment already received." });
+      } else if (data.url) {
+        window.location.href = data.url;
+      }
+    },
+    onError: (err: Error) => {
+      toast({ title: "Payment Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const mailSessionId = params.get("mail_session_id");
+    if (mailSessionId && caseData && !caseData.mailPaid) {
+      apiRequest("POST", `/api/cases/${caseToken}/verify-mail-payment`, { sessionId: mailSessionId })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.paid) {
+            queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken] });
+            toast({ title: "Payment Confirmed", description: "Certified mail payment received. You can now send your letter." });
+          }
+        })
+        .catch(() => {});
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [caseData, caseToken, toast]);
 
   const handleFileDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -754,23 +789,55 @@ export default function CaseDashboard() {
             </div>
 
             {deliveries.length === 0 ? (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <p className="text-sm text-muted-foreground">
-                  Send your signed demand letter via USPS Certified Mail for legal proof of delivery.
-                </p>
-                <Button
-                  onClick={() => sendLetter.mutate()}
-                  disabled={sendLetter.isPending}
-                  className="bg-[#2E5FAA] text-white whitespace-nowrap"
-                  data-testid="button-send-certified-mail"
-                >
-                  {sendLetter.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 p-4 rounded-md bg-[#2E5FAA]/5 dark:bg-[#2E5FAA]/10 border border-[#2E5FAA]/20">
+                  <Mail className="h-5 w-5 text-[#2E5FAA] flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-medium text-foreground text-sm mb-1">We Handle Everything</h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      We print, mail, and track your demand letter via USPS Certified Mail with return receipt — legal proof your landlord received it. Includes postage, printing, and tracking.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    {caseData.mailPaid && (
+                      <Badge className="bg-green-600 text-white" data-testid="badge-mail-paid">
+                        <CheckCircle2 className="mr-1 h-3 w-3" />
+                        Paid
+                      </Badge>
+                    )}
+                  </div>
+                  {!caseData.mailPaid ? (
+                    <Button
+                      onClick={() => mailCheckout.mutate()}
+                      disabled={mailCheckout.isPending}
+                      className="bg-[#C9A84C] text-white border-[#b8963f] whitespace-nowrap"
+                      data-testid="button-pay-certified-mail"
+                    >
+                      {mailCheckout.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <CreditCard className="mr-2 h-4 w-4" />
+                      )}
+                      {mailCheckout.isPending ? "Processing..." : "Pay $12 — Send via Certified Mail"}
+                    </Button>
                   ) : (
-                    <Mail className="mr-2 h-4 w-4" />
+                    <Button
+                      onClick={() => sendLetter.mutate()}
+                      disabled={sendLetter.isPending}
+                      className="bg-[#2E5FAA] text-white whitespace-nowrap"
+                      data-testid="button-send-certified-mail"
+                    >
+                      {sendLetter.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Mail className="mr-2 h-4 w-4" />
+                      )}
+                      {sendLetter.isPending ? "Sending..." : "Send Now"}
+                    </Button>
                   )}
-                  {sendLetter.isPending ? "Sending..." : "Send via USPS Certified Mail"}
-                </Button>
+                </div>
               </div>
             ) : (
               <div className="space-y-3">
