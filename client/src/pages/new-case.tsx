@@ -13,9 +13,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Shield, ArrowLeft, ArrowRight, MapPin, Calendar, DollarSign, User, Building2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, MapPin, Calendar, DollarSign, User, Building2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-provider";
+import { Logo } from "@/components/logo";
 import { usePageTitle } from "@/hooks/use-page-title";
 
 const caseFormSchema = z.object({
@@ -111,8 +112,7 @@ export default function NewCasePage() {
             data-testid="button-back-home"
           >
             <ArrowLeft className="h-4 w-4" />
-            <Shield className="h-5 w-5 text-[#2E5FAA]" />
-            <span className="font-serif text-sm font-bold text-foreground">TenantAdvocate</span>
+            <Logo size="sm" />
           </button>
           <div className="flex items-center gap-2">
             <ThemeToggle />

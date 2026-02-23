@@ -12,11 +12,12 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Shield, ArrowLeft, CheckCircle2, AlertTriangle, Eraser, Send, Loader2, FileText,
+  ArrowLeft, CheckCircle2, AlertTriangle, Eraser, Send, Loader2, FileText,
   Printer, Download, Mail, Scale, ArrowRight, Pencil, Save, X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-provider";
+import { Logo } from "@/components/logo";
 import { usePageTitle } from "@/hooks/use-page-title";
 
 export default function LetterPreviewPage() {
@@ -333,7 +334,7 @@ export default function LetterPreviewPage() {
             data-testid="button-back-dashboard"
           >
             <ArrowLeft className="h-4 w-4" />
-            <Shield className="h-5 w-5 text-[#2E5FAA]" />
+            <Logo size="sm" showText={false} />
             <span className="font-serif text-sm font-bold text-foreground">Back to Case</span>
           </button>
           <div className="flex items-center gap-2">

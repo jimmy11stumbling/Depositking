@@ -1,8 +1,9 @@
 import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Shield, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-provider";
+import { Logo } from "@/components/logo";
 import { usePageTitle } from "@/hooks/use-page-title";
 
 export default function NotFound() {
@@ -19,8 +20,7 @@ export default function NotFound() {
             data-testid="button-back-home"
           >
             <ArrowLeft className="h-4 w-4" />
-            <Shield className="h-5 w-5 text-[#2E5FAA]" />
-            <span className="font-serif text-sm font-bold text-foreground">TenantAdvocate</span>
+            <Logo size="sm" />
           </button>
           <ThemeToggle />
         </div>

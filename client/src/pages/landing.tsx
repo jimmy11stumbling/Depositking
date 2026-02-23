@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "@/components/theme-provider";
+import { Logo, logoSrc } from "@/components/logo";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { STATE_LAWS } from "../../../shared/stateLaws";
 
@@ -317,15 +318,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-background">
       <header className="border-b bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
-            <div className="relative flex-shrink-0">
-              <Shield className="h-7 w-7 sm:h-8 sm:w-8 text-[#2E5FAA]" />
-              <div className="absolute -top-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#C9A84C] rounded-full border-2 border-background" />
-            </div>
-            <span className="font-serif text-sm sm:text-lg font-bold text-foreground tracking-tight whitespace-nowrap">
-              TenantAdvocate
-            </span>
-          </div>
+          <Logo size="md" className="flex-shrink-0 min-w-0 text-sm sm:text-lg" />
           <div className="flex items-center gap-2 flex-shrink-0">
             <ThemeToggle />
             <Button
@@ -894,10 +887,7 @@ export default function LandingPage() {
       <footer className="py-10 px-4 sm:px-6 border-t" data-testid="footer">
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
-            <div className="flex items-center gap-2.5">
-              <Shield className="h-6 w-6 text-[#2E5FAA]" />
-              <span className="font-serif text-sm font-bold text-foreground">TenantAdvocate</span>
-            </div>
+            <Logo size="md" />
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span>All 50 States</span>
               <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />

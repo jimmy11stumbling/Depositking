@@ -11,12 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Shield, ArrowLeft, AlertTriangle, CheckCircle2, Clock,
+  ArrowLeft, AlertTriangle, CheckCircle2, Clock,
   Scale, DollarSign, Plus, Trash2, FileText, Sparkles, CreditCard, Loader2,
   Printer, Eye, Upload, BadgeCheck, Download, Mail, Gavel, Info,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-provider";
+import { Logo } from "@/components/logo";
 import { usePageTitle } from "@/hooks/use-page-title";
 
 interface EvidenceItem {
@@ -361,8 +362,7 @@ export default function CaseDashboard() {
             data-testid="button-back-home"
           >
             <ArrowLeft className="h-4 w-4" />
-            <Shield className="h-5 w-5 text-[#2E5FAA]" />
-            <span className="font-serif text-sm font-bold text-foreground">TenantAdvocate</span>
+            <Logo size="sm" />
           </button>
           <div className="flex items-center gap-1">
             <ThemeToggle />

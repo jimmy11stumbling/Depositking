@@ -7,9 +7,10 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Shield, ArrowLeft, ArrowRight, Plus, FileText, Clock,
+  ArrowLeft, ArrowRight, Plus, FileText, Clock,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-provider";
+import { Logo } from "@/components/logo";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { getCaseTokens } from "@/lib/caseTokens";
 import { apiRequest } from "@/lib/queryClient";
@@ -63,8 +64,7 @@ export default function CasesListPage() {
             data-testid="button-back-home"
           >
             <ArrowLeft className="h-4 w-4" />
-            <Shield className="h-5 w-5 text-[#2E5FAA]" />
-            <span className="font-serif text-sm font-bold text-foreground">TenantAdvocate</span>
+            <Logo size="sm" />
           </button>
           <div className="flex items-center gap-1">
             <ThemeToggle />

@@ -9,11 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Shield, ArrowLeft, ArrowRight, CheckCircle2, Loader2, AlertTriangle,
+  ArrowLeft, ArrowRight, CheckCircle2, Loader2, AlertTriangle,
   Search, Scale, FileText, ShieldCheck, Sparkles,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "@/components/theme-provider";
+import { Logo } from "@/components/logo";
 import { usePageTitle } from "@/hooks/use-page-title";
 
 const agentMeta: Record<string, { icon: any; label: string; description: string }> = {
@@ -172,7 +173,7 @@ export default function GenerateLetterPage() {
             data-testid="button-back-dashboard"
           >
             <ArrowLeft className="h-4 w-4" />
-            <Shield className="h-5 w-5 text-[#2E5FAA]" />
+            <Logo size="sm" showText={false} />
             <span className="font-serif text-sm font-bold text-foreground">Back to Case</span>
           </button>
           <div className="flex items-center gap-1">
