@@ -287,6 +287,60 @@
   }
 }
 
+.hero-gradient {
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 80%, hsl(217 91% 35% / 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 20%, hsl(43 74% 54% / 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse 100% 80% at 50% 0%, hsl(217 91% 35% / 0.04) 0%, transparent 70%);
+}
+
+.dark .hero-gradient {
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 80%, hsl(217 91% 35% / 0.15) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 20%, hsl(43 74% 54% / 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse 100% 80% at 50% 0%, hsl(217 91% 35% / 0.1) 0%, transparent 70%);
+}
+
+.hero-grid {
+  background-image:
+    linear-gradient(hsl(var(--foreground)) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--foreground)) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+.ticker-container {
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
+  mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
+}
+
+.ticker-track {
+  animation: ticker-scroll 60s linear infinite;
+  width: max-content;
+}
+
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track {
+    animation-duration: 120s;
+  }
+}
+
+.ticker-fade-left {
+  background: linear-gradient(90deg, hsl(var(--background)), transparent);
+}
+
+.ticker-fade-right {
+  background: linear-gradient(270deg, hsl(var(--background)), transparent);
+}
+
 @media print {
   .print\\:hidden {
     display: none !important;
