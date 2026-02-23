@@ -47,6 +47,7 @@ AI-powered legal technology platform that helps residential tenants recover secu
 - **Per-Page SEO Titles**: Dynamic document.title + meta descriptions via usePageTitle hook on every page
 - **Theme Toggle**: Moon/Sun icon button in every page header (`client/src/components/theme-provider.tsx`)
 - **Letter Editing**: Editable letter content with HTML sanitization before signing
+- **Security Hardening**: CSP headers, HSTS, CORS origin validation, generic error responses, rate limiting per endpoint (uploads/sign/checkout/generate), body size limits (1MB), filename sanitization, attachment disposition on downloads, payment bypass prevention (schema omits mailPaid), deduction ownership verification, localStorage-based case access (no public case listing)
 
 ## Design Theme
 - Slate Navy (#1E3A5F), Authority Blue (#2E5FAA), Gold (#C9A84C)
@@ -56,6 +57,7 @@ AI-powered legal technology platform that helps residential tenants recover secu
 
 ## API Routes
 - All POST routes use Zod validation via drizzle-zod insert schemas
+- POST `/api/cases/by-tokens` - Fetch cases by access tokens (localStorage-based, no public listing)
 - POST `/api/cases` - Create case (insertCaseSchema)
 - POST `/api/cases/:id/deductions` - Add deduction (insertDeductionSchema)
 - DELETE `/api/cases/:id/deductions/:deductionId` - Remove deduction

@@ -12,6 +12,11 @@ import { db } from "./db";
 import multer from "multer";
 import crypto from "crypto";
 
+function safeError(res: Response, err: any, context: string, status = 500) {
+  console.error(`${context}:`, err);
+  res.status(status).json({ error: "An internal error occurred. Please try again." });
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -221,13 +226,27 @@ export async function registerRoutes(
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  app.get("/api/cases", async (_req, res) => {
+  app.post("/api/cases/by-tokens", async (req, res) => {
     try {
-      const cases = await storage.getAllCases();
-      const safeCases = cases.map(({ accessToken, ...rest }) => rest);
-      res.json(safeCases);
+      const schema = z.object({
+        tokens: z.array(z.string().min(1).max(128)).max(50),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request" });
+      }
+      const results: any[] = [];
+      for (const token of parsed.data.tokens) {
+        const caseData = await storage.getCaseByToken(token);
+        if (caseData) {
+          const { stripeSessionId, mailStripeSessionId, ...safe } = caseData;
+          results.push(safe);
+        }
+      }
+      res.json(results);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      console.error("Fetch cases by tokens error:", err);
+      res.status(500).json({ error: "Failed to retrieve cases" });
     }
   });
 
@@ -237,7 +256,7 @@ export async function registerRoutes(
       if (!caseData) return res.status(404).json({ error: "Case not found" });
       res.json(caseData);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Get case error");
     }
   });
 
@@ -287,7 +306,7 @@ export async function registerRoutes(
       const updated = await storage.getCase(newCase.id);
       res.status(201).json(updated);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Create case error");
     }
   });
 
@@ -307,7 +326,7 @@ export async function registerRoutes(
       if (!analysis) return res.status(400).json({ error: "Invalid state" });
       res.json(analysis);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Get analysis error");
     }
   });
 
@@ -318,7 +337,7 @@ export async function registerRoutes(
       const deductionsList = await storage.getDeductionsByCase(caseData.id);
       res.json(deductionsList);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Get deductions error");
     }
   });
 
@@ -333,7 +352,7 @@ export async function registerRoutes(
       const deduction = await storage.createDeduction(parsed.data);
       res.status(201).json(deduction);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Create deduction error");
     }
   });
 
@@ -341,11 +360,17 @@ export async function registerRoutes(
     try {
       const caseData = await resolveCase(req, res);
       if (!caseData) return res.status(404).json({ error: "Case not found" });
+      if (caseData.status === "signed") return res.status(400).json({ error: "Cannot modify a signed case" });
       const deductionId = parseInt(req.params.deductionId);
+      if (isNaN(deductionId)) return res.status(400).json({ error: "Invalid deduction ID" });
+      const deductions = await storage.getDeductionsByCase(caseData.id);
+      const deduction = deductions.find(d => d.id === deductionId);
+      if (!deduction) return res.status(404).json({ error: "Deduction not found for this case" });
       await storage.deleteDeduction(deductionId);
       res.status(204).send();
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      console.error("Delete deduction error:", err);
+      res.status(500).json({ error: "Failed to delete deduction" });
     }
   });
 
@@ -357,7 +382,7 @@ export async function registerRoutes(
       if (!letter) return res.status(404).json({ error: "No letter found" });
       res.json(letter);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Get letter error");
     }
   });
 
@@ -573,7 +598,7 @@ export async function registerRoutes(
       if (resolvedCase) {
         await storage.updateCase(resolvedCase.id, { status: "analysis" });
       }
-      send({ status: "error", message: err.message || "Generation failed" });
+      send({ status: "error", message: "Letter generation failed. Please try again." });
       res.end();
     }
   });
@@ -620,7 +645,7 @@ export async function registerRoutes(
       const updated = await storage.updateLetter(letter.id, { finalHtml: cleanHtml });
       res.json(updated);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Update letter error");
     }
   });
 
@@ -654,7 +679,7 @@ export async function registerRoutes(
 
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Sign case error");
     }
   });
 
@@ -666,7 +691,7 @@ export async function registerRoutes(
       if (!signature) return res.status(404).json({ error: "No signature found" });
       res.json(signature);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Get signature error");
     }
   });
 
@@ -686,7 +711,7 @@ export async function registerRoutes(
       const key = await getStripePublishableKey();
       res.json({ publishableKey: key });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Get publishable key error");
     }
   });
 
@@ -727,8 +752,7 @@ export async function registerRoutes(
 
       res.json({ url: session.url });
     } catch (err: any) {
-      console.error("Checkout error:", err);
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Checkout error");
     }
   });
 
@@ -760,8 +784,7 @@ export async function registerRoutes(
 
       res.json({ paid: false });
     } catch (err: any) {
-      console.error("Verify payment error:", err);
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Verify payment error");
     }
   });
 
@@ -802,8 +825,7 @@ export async function registerRoutes(
 
       res.json({ url: session.url });
     } catch (err: any) {
-      console.error("Mail checkout error:", err);
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Mail checkout error");
     }
   });
 
@@ -834,8 +856,7 @@ export async function registerRoutes(
 
       res.json({ paid: false });
     } catch (err: any) {
-      console.error("Verify mail payment error:", err);
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Verify mail payment error");
     }
   });
 
@@ -882,7 +903,7 @@ export async function registerRoutes(
         uploadedAt: ev.uploadedAt,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Upload evidence error");
     }
   });
 
@@ -902,7 +923,7 @@ export async function registerRoutes(
         uploadedAt: e.uploadedAt,
       })));
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Get evidence list error");
     }
   });
 
@@ -911,14 +932,17 @@ export async function registerRoutes(
       const caseData = await resolveCase(req, res);
       if (!caseData) return res.status(404).json({ error: "Case not found" });
       const evidenceId = parseInt(req.params.evidenceId);
+      if (isNaN(evidenceId)) return res.status(400).json({ error: "Invalid evidence ID" });
       const ev = await storage.getEvidence(evidenceId);
       if (!ev || ev.caseId !== caseData.id) return res.status(404).json({ error: "Evidence not found" });
       const buffer = Buffer.from(ev.fileData, "base64");
+      const safeFilename = ev.filename.replace(/[^a-zA-Z0-9._-]/g, "_").substring(0, 200);
       res.setHeader("Content-Type", ev.mimeType);
-      res.setHeader("Content-Disposition", `inline; filename="${ev.filename}"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
+      res.setHeader("X-Content-Type-Options", "nosniff");
       res.send(buffer);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Download evidence error");
     }
   });
 
@@ -933,7 +957,7 @@ export async function registerRoutes(
       await storage.deleteEvidence(evidenceId);
       res.status(204).send();
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Delete evidence error");
     }
   });
 
@@ -963,7 +987,7 @@ export async function registerRoutes(
 
       res.json(manifest);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Get evidence manifest error");
     }
   });
 
@@ -1052,8 +1076,7 @@ export async function registerRoutes(
 
       res.status(201).json(delivery);
     } catch (err: any) {
-      console.error("Send letter error:", err);
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Send letter error");
     }
   });
 
@@ -1064,7 +1087,7 @@ export async function registerRoutes(
       const items = await storage.getDeliveriesByCase(caseData.id);
       res.json(items);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Get deliveries error");
     }
   });
 
@@ -1130,7 +1153,7 @@ export async function registerRoutes(
 
       res.status(201).json(courtForm);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Create court form error");
     }
   });
 
@@ -1141,7 +1164,7 @@ export async function registerRoutes(
       const forms = await storage.getCourtFormsByCase(caseData.id);
       res.json(forms);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      safeError(res, err, "Get court forms error");
     }
   });
 

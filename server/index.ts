@@ -83,9 +83,45 @@ app.post(
 );
 
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.stripe.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", "https://api.stripe.com", "wss:"],
+      frameSrc: ["'self'", "https://js.stripe.com"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    },
+  },
   crossOriginEmbedderPolicy: false,
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  hsts: { maxAge: 31536000, includeSubDomains: true },
 }));
+
+app.use((_req, res, next) => {
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  next();
+});
+
+app.use("/api", (req, res, next) => {
+  const origin = req.get("origin");
+  if (origin) {
+    const host = req.get("host");
+    const allowedOrigins = [
+      `https://${host}`,
+      `http://${host}`,
+    ];
+    if (!allowedOrigins.includes(origin)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+  }
+  next();
+});
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -112,19 +148,40 @@ const checkoutLimiter = rateLimit({
   message: { error: "Too many checkout attempts. Please try again later." },
 });
 
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many upload attempts. Please try again later." },
+});
+
+const signLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many signing attempts. Please try again later." },
+});
+
 app.use("/api/", apiLimiter);
 app.use("/api/cases/:id/generate", generationLimiter);
 app.use("/api/cases/:id/checkout", checkoutLimiter);
+app.use("/api/cases/:id/mail-checkout", checkoutLimiter);
+app.use("/api/cases/:id/evidence", uploadLimiter);
+app.use("/api/cases/:id/sign", signLimiter);
+app.use("/api/cases/:id/send-letter", signLimiter);
 
 app.use(
   express.json({
+    limit: "1mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -168,7 +225,6 @@ app.use((req, res, next) => {
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
 
     console.error("Internal Server Error:", err);
 
@@ -176,7 +232,7 @@ app.use((req, res, next) => {
       return next(err);
     }
 
-    return res.status(status).json({ message });
+    return res.status(status).json({ message: status === 400 ? "Bad request" : "An internal error occurred. Please try again." });
   });
 
   if (process.env.NODE_ENV === "production") {

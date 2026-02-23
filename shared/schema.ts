@@ -103,7 +103,9 @@ export const insertCaseSchema = createInsertSchema(cases).omit({
   potentialRecovery: true,
   daysPastDeadline: true,
   paid: true,
+  mailPaid: true,
   stripeSessionId: true,
+  mailStripeSessionId: true,
   letterSentAt: true,
   letterSentMethod: true,
 });

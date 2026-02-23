@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-provider";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { getCaseTokens } from "@/lib/caseTokens";
+import { apiRequest } from "@/lib/queryClient";
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -39,8 +41,16 @@ export default function CasesListPage() {
   const [, navigate] = useLocation();
   usePageTitle("Your Security Deposit Cases — Dashboard", "View and manage all your security deposit recovery cases. Track violations, penalties, demand letter status, and certified mail delivery progress.");
 
+  const tokens = getCaseTokens();
+
   const { data: cases, isLoading } = useQuery<Case[]>({
-    queryKey: ["/api/cases"],
+    queryKey: ["/api/cases/by-tokens", tokens.length],
+    queryFn: async () => {
+      if (tokens.length === 0) return [];
+      const res = await apiRequest("POST", "/api/cases/by-tokens", { tokens });
+      return res.json();
+    },
+    enabled: true,
   });
 
   return (

@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
+import { saveCaseToken } from "@/lib/caseTokens";
 import { US_STATES } from "@/lib/stateLaws";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -74,6 +75,7 @@ export default function NewCasePage() {
       return res.json();
     },
     onSuccess: (data) => {
+      saveCaseToken(data.accessToken);
       navigate(`/cases/${data.accessToken}`);
     },
     onError: (err: Error) => {
