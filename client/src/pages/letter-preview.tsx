@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Shield, ArrowLeft, CheckCircle2, AlertTriangle, Eraser, Send, Loader2, FileText,
-  Printer, Download, Mail, Scale, ArrowRight,
+  Printer, Download, Mail, Scale, ArrowRight, Pencil, Save, X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-provider";
@@ -32,6 +32,9 @@ export default function LetterPreviewPage() {
   const [certified, setCertified] = useState(false);
   const [sigError, setSigError] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedHtml, setEditedHtml] = useState("");
+  const editorRef = useRef<HTMLDivElement>(null);
   const signatureSectionRef = useRef<HTMLDivElement>(null);
 
   const { data: caseData, isLoading: caseLoading } = useQuery<Case>({
@@ -61,6 +64,40 @@ export default function LetterPreviewPage() {
       ALLOWED_ATTR: ["class", "style"],
     });
   }, [letter?.finalHtml]);
+
+  const saveLetter = useMutation({
+    mutationFn: async (finalHtml: string) => {
+      const res = await apiRequest("PUT", `/api/cases/${caseToken}/letter`, { finalHtml });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Letter Saved", description: "Your changes have been saved." });
+      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken, "letter"] });
+      setIsEditing(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Save Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleStartEdit = () => {
+    setEditedHtml(sanitizedHtml);
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = () => {
+    const content = editorRef.current?.innerHTML || "";
+    if (content.length < 50) {
+      toast({ title: "Too Short", description: "The letter content is too short to save.", variant: "destructive" });
+      return;
+    }
+    saveLetter.mutate(content);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditedHtml("");
+  };
 
   const submitSignature = useMutation({
     mutationFn: async (signatureBase64: string) => {
@@ -320,12 +357,14 @@ export default function LetterPreviewPage() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
         <div className="text-center mb-4 print:hidden">
           <h1 className="font-serif text-2xl font-bold text-foreground mb-1">
-            {isSigned ? "Your Signed Demand Letter" : "Review Your Demand Letter"}
+            {isSigned ? "Your Signed Demand Letter" : isEditing ? "Editing Your Letter" : "Review Your Demand Letter"}
           </h1>
           <p className="text-sm text-muted-foreground">
             {isSigned
               ? "Your letter is finalized. Print or download it to send to your landlord."
-              : "Read the letter carefully, then sign below to finalize it."}
+              : isEditing
+              ? "Make your changes directly in the letter below. Click Save when done."
+              : "Review the letter carefully. You can edit it before signing."}
           </p>
         </div>
 
@@ -355,14 +394,54 @@ export default function LetterPreviewPage() {
           </div>
         )}
 
-        <Card className="p-6 sm:p-8 bg-white dark:bg-white text-gray-900 print:shadow-none print:border-none">
+        {!isSigned && !isEditing && (
+          <div className="flex justify-end print:hidden">
+            <Button variant="outline" onClick={handleStartEdit} data-testid="button-edit-letter">
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit Letter
+            </Button>
+          </div>
+        )}
+
+        {isEditing && (
+          <div className="flex items-center justify-between gap-2 p-3 rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 print:hidden">
+            <p className="text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2">
+              <Pencil className="h-4 w-4" />
+              You are editing the letter. Click directly in the text below to make changes.
+            </p>
+            <div className="flex gap-2 flex-shrink-0">
+              <Button size="sm" variant="outline" onClick={handleCancelEdit} data-testid="button-cancel-edit">
+                <X className="mr-1 h-3 w-3" />
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleSaveEdit} disabled={saveLetter.isPending} data-testid="button-save-letter">
+                {saveLetter.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Save className="mr-1 h-3 w-3" />}
+                {saveLetter.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <Card className={`p-6 sm:p-8 bg-white dark:bg-white text-gray-900 print:shadow-none print:border-none ${isEditing ? "ring-2 ring-amber-400 dark:ring-amber-600" : ""}`}>
           <div ref={letterContentRef}>
-            <div
-              className="prose prose-sm max-w-none font-serif leading-relaxed"
-              style={{ color: "#1a1a1a" }}
-              dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
-              data-testid="text-letter-content"
-            />
+            {isEditing ? (
+              <div
+                ref={editorRef}
+                contentEditable
+                suppressContentEditableWarning
+                className="prose prose-sm max-w-none font-serif leading-relaxed outline-none min-h-[400px] focus:outline-none"
+                style={{ color: "#1a1a1a" }}
+                dangerouslySetInnerHTML={{ __html: editedHtml }}
+                data-testid="editor-letter-content"
+              />
+            ) : (
+              <div
+                className="prose prose-sm max-w-none font-serif leading-relaxed"
+                style={{ color: "#1a1a1a" }}
+                dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+                data-testid="text-letter-content"
+              />
+            )}
 
           {isSigned && signature && (
             <div className="mt-8 pt-4 border-t border-gray-300">

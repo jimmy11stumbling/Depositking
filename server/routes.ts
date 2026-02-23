@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { STATE_LAWS } from "../shared/stateLaws";
 import { insertCaseSchema, insertDeductionSchema } from "@shared/schema";
 import { runParalegalAgent, runAttorneyAgent, runDrafterAgent, runReviewerAgent, withTimeout } from "./agents";
+import sanitizeHtml from "sanitize-html";
 import { z } from "zod";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { sql } from "drizzle-orm";
@@ -460,6 +461,52 @@ export async function registerRoutes(
       }
       send({ status: "error", message: err.message || "Generation failed" });
       res.end();
+    }
+  });
+
+  app.put("/api/cases/:id/letter", async (req, res) => {
+    try {
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      if (caseData.status === "signed") {
+        return res.status(400).json({ error: "Cannot edit a signed letter" });
+      }
+      if (!caseData.paid || caseData.status !== "generated") {
+        return res.status(400).json({ error: "Letter can only be edited after generation" });
+      }
+
+      const letter = await storage.getLetterByCase(caseData.id);
+      if (!letter) {
+        return res.status(400).json({ error: "No letter has been generated for this case" });
+      }
+
+      const updateSchema = z.object({
+        finalHtml: z.string().min(50, "Letter content is too short"),
+      });
+      const parsed = updateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors.map(e => e.message).join(", ") });
+      }
+
+      const cleanHtml = sanitizeHtml(parsed.data.finalHtml, {
+        allowedTags: ["p", "br", "strong", "em", "b", "i", "u", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "span", "div", "table", "thead", "tbody", "tr", "td", "th", "blockquote", "hr", "sup", "sub"],
+        allowedAttributes: { "*": ["class", "style"] },
+        allowedStyles: {
+          "*": {
+            "text-align": [/^left$/, /^right$/, /^center$/, /^justify$/],
+            "font-weight": [/^\d+$/, /^bold$/, /^normal$/],
+            "font-style": [/^italic$/, /^normal$/],
+            "text-decoration": [/^underline$/, /^none$/],
+            "margin-top": [/^\d+px$/],
+            "margin-bottom": [/^\d+px$/],
+          },
+        },
+      });
+
+      const updated = await storage.updateLetter(letter.id, { finalHtml: cleanHtml });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 
