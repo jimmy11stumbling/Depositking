@@ -43,7 +43,8 @@ AI-powered legal technology platform that helps residential tenants recover secu
 - **Court Forms**: Auto-populated small claims court filing data from case info
 - **PDF Download**: Signed demand letters can be downloaded as PDF via html2canvas + jsPDF
 - **Dark Mode**: Class-based dark mode with ThemeProvider, localStorage persistence, system preference detection
-- **Per-Page SEO Titles**: Dynamic document.title via usePageTitle hook on every page
+- **SEO Optimization**: Comprehensive structured data (JSON-LD Schema.org), FAQ schema, per-page meta descriptions, robots.txt with AI bot allowances, sitemap.xml, keyword-rich content sections
+- **Per-Page SEO Titles**: Dynamic document.title + meta descriptions via usePageTitle hook on every page
 - **Theme Toggle**: Moon/Sun icon button in every page header (`client/src/components/theme-provider.tsx`)
 - **Letter Editing**: Editable letter content with HTML sanitization before signing
 

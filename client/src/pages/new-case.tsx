@@ -39,7 +39,7 @@ export default function NewCasePage() {
   const [, navigate] = useLocation();
   const [step, setStep] = useState(1);
   const { toast } = useToast();
-  usePageTitle("Start Your Case");
+  usePageTitle("Start Your Security Deposit Case — Free Analysis", "Start your free security deposit recovery case. Enter your state, deposit amount, and move-out date to instantly detect landlord violations and calculate penalties under your state's law.");
 
   const form = useForm<CaseFormValues>({
     resolver: zodResolver(caseFormSchema),

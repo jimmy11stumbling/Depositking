@@ -55,7 +55,7 @@ export default function LetterPreviewPage() {
 
   const isSigned = caseData?.status === "signed";
 
-  usePageTitle(isSigned ? `Signed Letter - Case #${caseId}` : `Review Letter - Case #${caseId}`);
+  usePageTitle(isSigned ? `Signed Demand Letter — Case #${caseId}` : `Review Demand Letter — Case #${caseId}`, "Review, edit, and sign your AI-generated security deposit demand letter. Download as PDF or send via USPS certified mail with tracking.");
 
   const sanitizedHtml = useMemo(() => {
     if (!letter?.finalHtml) return "";

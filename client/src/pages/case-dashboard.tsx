@@ -102,7 +102,7 @@ export default function CaseDashboard() {
 
   const caseId = caseData?.id;
 
-  usePageTitle(caseId ? `Case #${caseId} Dashboard` : "Case Dashboard");
+  usePageTitle(caseId ? `Case #${caseId} — Security Deposit Recovery Dashboard` : "Security Deposit Recovery Dashboard", "Review your security deposit case: violation detection, penalty calculations, disputed deductions, evidence uploads, and AI-powered demand letter generation.");
 
   const { data: analysis, isLoading: analysisLoading } = useQuery<CaseAnalysis>({
     queryKey: ["/api/cases", caseToken, "analysis"],

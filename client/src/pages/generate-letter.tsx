@@ -46,7 +46,7 @@ export default function GenerateLetterPage() {
 
   const caseId = caseData?.id;
 
-  usePageTitle(caseId ? `Generate Letter - Case #${caseId}` : "Generate Letter");
+  usePageTitle(caseId ? `AI Demand Letter Generation — Case #${caseId}` : "AI Demand Letter Generation", "Watch as 4 AI legal agents analyze your case, research state statutes, and generate a professional security deposit demand letter in real time.");
 
   useEffect(() => {
     if (!caseData) return;

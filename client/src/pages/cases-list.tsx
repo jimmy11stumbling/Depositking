@@ -37,7 +37,7 @@ const statusLabels: Record<string, string> = {
 
 export default function CasesListPage() {
   const [, navigate] = useLocation();
-  usePageTitle("Your Cases");
+  usePageTitle("Your Security Deposit Cases — Dashboard", "View and manage all your security deposit recovery cases. Track violations, penalties, demand letter status, and certified mail delivery progress.");
 
   const { data: cases, isLoading } = useQuery<Case[]>({
     queryKey: ["/api/cases"],

@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import {
   Shield, Scale, FileText, Clock, ArrowRight, CheckCircle2, AlertTriangle,
   Zap, Users, MapPin, DollarSign, TrendingUp, Gavel, BadgeCheck, ChevronDown,
-  Lock, Mail, Briefcase, Camera,
+  Lock, Mail, Briefcase, Camera, HelpCircle, ChevronRight, Building2, BookOpen,
 } from "lucide-react";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "@/components/theme-provider";
@@ -267,9 +267,48 @@ function DepositValidator() {
   );
 }
 
+function FAQItem({ question, answer, index }: { question: string; answer: string; index: number }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <motion.div
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, margin: "-30px" }}
+      variants={fadeUp}
+      custom={index * 0.5}
+    >
+      <Card className="overflow-hidden">
+        <button
+          onClick={() => setOpen(!open)}
+          className="w-full flex items-center justify-between p-5 text-left gap-4 hover:bg-muted/30 transition-colors"
+          data-testid={`faq-toggle-${index}`}
+          aria-expanded={open}
+        >
+          <h3 className="font-semibold text-sm text-foreground pr-4">{question}</h3>
+          <ChevronRight className={`h-4 w-4 text-muted-foreground flex-shrink-0 transition-transform duration-200 ${open ? "rotate-90" : ""}`} />
+        </button>
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="px-5 pb-5 pt-0">
+                <p className="text-sm text-muted-foreground leading-relaxed">{answer}</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </Card>
+    </motion.div>
+  );
+}
+
 export default function LandingPage() {
   const [, navigate] = useLocation();
-  usePageTitle();
+  usePageTitle(undefined, "TenantAdvocate helps renters recover security deposits withheld unfairly. AI-powered demand letters, 50-state coverage, penalty calculators, evidence vault, certified mail, and small claims court prep. $29 flat fee.");
   const { scrollY } = useScroll();
   const heroOpacity = useTransform(scrollY, [0, 400], [1, 0]);
   const heroScale = useTransform(scrollY, [0, 400], [1, 0.97]);
@@ -665,7 +704,194 @@ export default function LandingPage() {
         </motion.div>
       </section>
 
-      <footer className="py-10 px-4 sm:px-6 border-t">
+      <section className="py-20 sm:py-28 px-4 sm:px-6 bg-card/50 border-y" data-testid="section-tenant-rights">
+        <div className="max-w-6xl mx-auto">
+          <motion.div
+            className="text-center mb-16"
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-100px" }}
+            variants={fadeUp}
+            custom={0}
+          >
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-medium text-muted-foreground mb-4">
+              <BookOpen className="h-3 w-3" />
+              Know Your Rights
+            </div>
+            <h2 className="font-serif text-3xl sm:text-4xl font-bold text-foreground mb-3">
+              Security Deposit Laws by State
+            </h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Every state has different rules for security deposit returns, penalties, and tenant protections.
+              TenantAdvocate tracks all 50 states so you don't have to.
+            </p>
+          </motion.div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-12">
+            {[
+              { state: "California", deadline: "21 days", penalty: "Up to 2x deposit in bad faith", law: "Cal. Civ. Code § 1950.5" },
+              { state: "New York", deadline: "14 days", penalty: "Full deposit + damages", law: "GOL § 7-108" },
+              { state: "Texas", deadline: "30 days", penalty: "$100 + 3x deposit", law: "Tex. Prop. Code § 92.109" },
+              { state: "Florida", deadline: "15-30 days", penalty: "Full deposit + court costs", law: "Fla. Stat. § 83.49" },
+              { state: "Illinois", deadline: "30-45 days", penalty: "2x deposit", law: "765 ILCS 710" },
+              { state: "Pennsylvania", deadline: "30 days", penalty: "2x deposit", law: "68 Pa.C.S. § 250.512" },
+            ].map((item, i) => (
+              <motion.div
+                key={item.state}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, margin: "-50px" }}
+                variants={fadeUp}
+                custom={i}
+              >
+                <Card className="p-5 h-full hover-elevate" data-testid={`card-state-law-${item.state.toLowerCase()}`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Building2 className="h-4 w-4 text-[#2E5FAA]" />
+                    <h3 className="font-serif font-bold text-foreground">{item.state}</h3>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Return deadline:</span>
+                      <span className="font-medium text-foreground">{item.deadline}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Penalty:</span>
+                      <span className="font-medium text-[#C9A84C]">{item.penalty}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground pt-1 border-t">{item.law}</p>
+                  </div>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8">
+            <motion.div
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-50px" }}
+              variants={fadeUp}
+              custom={0}
+            >
+              <Card className="p-6 h-full">
+                <h3 className="font-serif text-lg font-bold text-foreground mb-4">What Landlords Cannot Deduct</h3>
+                <ul className="space-y-2.5">
+                  {[
+                    "Normal wear and tear — faded paint, minor carpet wear, small nail holes",
+                    "Pre-existing damage documented before move-in",
+                    "Routine cleaning between tenants (unless unit was left excessively dirty)",
+                    "Appliance depreciation from normal use over time",
+                    "Repairs for issues reported during tenancy but never fixed",
+                  ].map((item, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            </motion.div>
+            <motion.div
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-50px" }}
+              variants={fadeUp}
+              custom={1}
+            >
+              <Card className="p-6 h-full">
+                <h3 className="font-serif text-lg font-bold text-foreground mb-4">When to Take Legal Action</h3>
+                <ul className="space-y-2.5">
+                  {[
+                    "Landlord missed the statutory deadline to return your deposit",
+                    "Deductions are for normal wear and tear, not actual damage",
+                    "No itemized statement of deductions was provided",
+                    "Deposit was not held in a separate escrow account (required in some states)",
+                    "Landlord is unresponsive to written requests for deposit return",
+                  ].map((item, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <AlertTriangle className="h-4 w-4 text-[#C9A84C] mt-0.5 flex-shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-20 sm:py-28 px-4 sm:px-6" data-testid="section-faq">
+        <div className="max-w-4xl mx-auto">
+          <motion.div
+            className="text-center mb-16"
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-100px" }}
+            variants={fadeUp}
+            custom={0}
+          >
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-medium text-muted-foreground mb-4">
+              <HelpCircle className="h-3 w-3" />
+              FAQ
+            </div>
+            <h2 className="font-serif text-3xl sm:text-4xl font-bold text-foreground mb-3">
+              Frequently Asked Questions About Security Deposits
+            </h2>
+            <p className="text-muted-foreground max-w-xl mx-auto">
+              Everything renters need to know about getting their security deposit back.
+            </p>
+          </motion.div>
+
+          <div className="space-y-3">
+            {[
+              {
+                q: "How do I get my security deposit back from my landlord?",
+                a: "Start by knowing your state's statutory deadline for deposit return (typically 14-60 days after move-out). Document the condition you left the property in with photos and videos. Then send a formal demand letter citing your state's specific statutes and penalties. If your landlord doesn't respond, file in small claims court. TenantAdvocate automates this entire process with AI-powered demand letter generation, evidence management, certified mail delivery, and court filing preparation — all for $29.",
+              },
+              {
+                q: "What is considered normal wear and tear vs. damage?",
+                a: "Normal wear and tear includes: faded or slightly worn paint, minor scuffs on floors, small nail holes from hanging pictures, worn carpet in high-traffic areas, minor scratches on countertops, and slightly dirty grout. Damage includes: large holes in walls, broken windows, pet stains or odors, burn marks, unauthorized paint colors, and broken fixtures. Landlords cannot legally charge tenants for normal wear and tear — it's an expected cost of renting out property.",
+              },
+              {
+                q: "How long does my landlord have to return my security deposit?",
+                a: "It depends on your state. California requires return within 21 days, New York within 14 days, Texas within 30 days, and Florida within 15-30 days depending on whether deductions are claimed. Other states range from 14 to 60 days. TenantAdvocate's 50-state database tracks every state's exact deadline and automatically calculates whether your landlord has violated the timeline.",
+              },
+              {
+                q: "What penalties can my landlord face for not returning my deposit on time?",
+                a: "Penalties vary significantly by state. Many states impose double or triple damages (2x-3x the deposit amount). Texas imposes $100 plus 3x the withheld amount. California allows 2x damages in bad faith cases. Some states also require landlords to pay interest on the deposit and/or the tenant's attorney fees. TenantAdvocate automatically calculates the maximum penalties available under your state's specific laws.",
+              },
+              {
+                q: "Can I sue my landlord in small claims court for my deposit?",
+                a: "Absolutely. Small claims court is the most common and accessible venue for security deposit disputes. Filing fees typically range from $30-$75, and you don't need a lawyer. Most states allow claims up to $5,000-$10,000 in small claims court. The key to winning is strong documentation: a professional demand letter, evidence of the property's condition at move-out, and knowledge of your state's statutes. TenantAdvocate provides all three.",
+              },
+              {
+                q: "Should I send my demand letter via certified mail?",
+                a: "Yes, strongly recommended. Certified mail with return receipt creates a legal record proving your landlord received the letter, demonstrates you're serious about pursuing your claim, and provides admissible evidence in court. Many states require written notice before filing suit. TenantAdvocate offers integrated USPS certified mail delivery with tracking for just $12.",
+              },
+              {
+                q: "My landlord charged me for carpet cleaning — is that legal?",
+                a: "It depends on your state and the condition of the carpet. In most states, landlords cannot charge for professional carpet cleaning if the carpet shows only normal wear and tear. However, if there are pet stains, burns, or other damage beyond normal use, the landlord may have a valid claim. Many states explicitly prohibit carpet cleaning deductions unless the lease specifically requires it AND the carpet was cleaned before move-in.",
+              },
+              {
+                q: "Do I need a lawyer to get my security deposit back?",
+                a: "No. Most security deposit disputes are handled in small claims court, where lawyers are often not even allowed. TenantAdvocate's 4-agent AI legal team generates demand letters that are comparable to what an attorney would draft, citing your state's exact statutes and maximum penalties — for $29 instead of the $200-$500+ a lawyer would charge. If your case is complex, we recommend consulting a licensed attorney.",
+              },
+              {
+                q: "What if my landlord already sent me a deduction list?",
+                a: "Review each deduction carefully. Landlords often charge for normal wear and tear (illegal in every state), pre-existing damage, or inflated repair costs. TenantAdvocate helps you identify which deductions are legitimate and which violate your state's laws, then generates a demand letter disputing the specific illegal deductions with statutory citations.",
+              },
+              {
+                q: "How does TenantAdvocate's AI legal team work?",
+                a: "TenantAdvocate uses 4 specialized AI agents: (1) A Paralegal Researcher that verifies your state's exact statutes, deadlines, and penalty provisions. (2) A Strategy Attorney that assesses your case strength and identifies the strongest legal arguments. (3) A Demand Letter Drafter that generates a professional legal letter with all relevant facts, citations, and calculations. (4) A Quality Reviewer that checks for accuracy, tone, and completeness. The entire process takes under 15 minutes.",
+              },
+            ].map((item, i) => (
+              <FAQItem key={i} question={item.q} answer={item.a} index={i} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <footer className="py-10 px-4 sm:px-6 border-t" data-testid="footer">
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-2.5">
@@ -680,8 +906,19 @@ export default function LandingPage() {
               <span>$29 Per Letter</span>
             </div>
           </div>
-          <div className="border-t pt-6">
-            <p className="text-[11px] text-muted-foreground text-center max-w-2xl mx-auto leading-relaxed">
+          <div className="border-t pt-6 space-y-4">
+            <p className="text-[11px] text-muted-foreground text-center max-w-3xl mx-auto leading-relaxed">
+              TenantAdvocate is the leading AI-powered security deposit recovery platform for renters across the United States.
+              We help tenants in all 50 states recover deposits withheld unfairly or returned past statutory deadlines.
+              Our services include AI demand letter generation, penalty and interest calculation, tamper-proof evidence management,
+              USPS certified mail delivery, and small claims court preparation.
+            </p>
+            <p className="text-[11px] text-muted-foreground text-center max-w-3xl mx-auto leading-relaxed">
+              Common searches: how to get security deposit back, landlord won't return deposit, security deposit demand letter,
+              tenant rights by state, normal wear and tear vs damage, security deposit laws, landlord tenant dispute,
+              small claims court security deposit, apartment deposit not returned, rental deposit recovery, unfair deductions from deposit.
+            </p>
+            <p className="text-[10px] text-muted-foreground text-center max-w-2xl mx-auto leading-relaxed">
               This platform is not a law firm and does not provide legal advice. AI-generated demand letters
               are tools for tenant self-representation based on publicly available statutes and user-provided facts.
               Consult a licensed attorney for complex legal matters or questions specific to your situation.
