@@ -224,7 +224,8 @@ export async function registerRoutes(
   app.get("/api/cases", async (_req, res) => {
     try {
       const cases = await storage.getAllCases();
-      res.json(cases);
+      const safeCases = cases.map(({ accessToken, ...rest }) => rest);
+      res.json(safeCases);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
