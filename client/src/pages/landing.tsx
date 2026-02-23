@@ -284,7 +284,7 @@ export default function LandingPage() {
               <div className="absolute -top-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#C9A84C] rounded-full border-2 border-background" />
             </div>
             <span className="font-serif text-sm sm:text-lg font-bold text-foreground tracking-tight whitespace-nowrap">
-              Deposit Retriever
+              TenantAdvocate
             </span>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -670,7 +670,7 @@ export default function LandingPage() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-2.5">
               <Shield className="h-6 w-6 text-[#2E5FAA]" />
-              <span className="font-serif text-sm font-bold text-foreground">The Deposit Retriever</span>
+              <span className="font-serif text-sm font-bold text-foreground">TenantAdvocate</span>
             </div>
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span>All 50 States</span>

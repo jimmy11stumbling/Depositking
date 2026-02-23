@@ -362,7 +362,7 @@ export default function CaseDashboard() {
           >
             <ArrowLeft className="h-4 w-4" />
             <Shield className="h-5 w-5 text-[#2E5FAA]" />
-            <span className="font-serif text-sm font-bold text-foreground">Deposit Retriever</span>
+            <span className="font-serif text-sm font-bold text-foreground">TenantAdvocate</span>
           </button>
           <div className="flex items-center gap-1">
             <ThemeToggle />

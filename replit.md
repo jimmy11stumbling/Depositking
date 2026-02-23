@@ -1,4 +1,4 @@
-# The Deposit Retriever
+# TenantAdvocate
 
 ## Overview
 AI-powered legal technology platform that helps residential tenants recover security deposits withheld unfairly or returned past statutory deadlines. Uses a 50-state statutory database, a 4-agent AI team powered by Google Gemini, to deliver an end-to-end solution from case intake to signed demand letters with electronic signature and PDF download. Comprehensive "all-in-one" solution including Evidence Vault, Enhanced Statutory Intelligence, USPS Certified Mail, and Small Claims Court form auto-population.
