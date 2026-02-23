@@ -276,17 +276,17 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5">
-            <div className="relative">
-              <Shield className="h-8 w-8 text-[#2E5FAA]" />
-              <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-[#C9A84C] rounded-full border-2 border-background" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
+            <div className="relative flex-shrink-0">
+              <Shield className="h-7 w-7 sm:h-8 sm:w-8 text-[#2E5FAA]" />
+              <div className="absolute -top-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#C9A84C] rounded-full border-2 border-background" />
             </div>
-            <span className="font-serif text-lg font-bold text-foreground tracking-tight">
-              The Deposit Retriever
+            <span className="font-serif text-sm sm:text-lg font-bold text-foreground tracking-tight whitespace-nowrap">
+              Deposit Retriever
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <ThemeToggle />
             <Button
               size="sm"
@@ -300,12 +300,14 @@ export default function LandingPage() {
               Check My Deposit
             </Button>
             <Button
+              size="sm"
               data-testid="button-start-case-header"
               onClick={() => navigate("/new-case")}
-              className="text-sm"
+              className="text-xs sm:text-sm"
             >
-              Start Your Case
-              <ArrowRight className="ml-1 h-4 w-4" />
+              <span className="hidden sm:inline">Start Your Case</span>
+              <span className="sm:hidden">Start Case</span>
+              <ArrowRight className="ml-1 h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
           </div>
         </div>
