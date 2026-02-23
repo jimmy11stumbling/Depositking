@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { eq } from "drizzle-orm";
+import crypto from "crypto";
 import {
   cases, deductions, letters, signatures,
   type Case, type InsertCase,
@@ -11,6 +12,7 @@ import {
 export interface IStorage {
   createCase(data: InsertCase): Promise<Case>;
   getCase(id: number): Promise<Case | undefined>;
+  getCaseByToken(token: string): Promise<Case | undefined>;
   getAllCases(): Promise<Case[]>;
   updateCase(id: number, data: Partial<Case>): Promise<Case | undefined>;
 
@@ -26,14 +28,24 @@ export interface IStorage {
   getSignatureByCase(caseId: number): Promise<Signature | undefined>;
 }
 
+function generateAccessToken(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
+
 export class DatabaseStorage implements IStorage {
   async createCase(data: InsertCase): Promise<Case> {
-    const [result] = await db.insert(cases).values(data).returning();
+    const accessToken = generateAccessToken();
+    const [result] = await db.insert(cases).values({ ...data, accessToken }).returning();
     return result;
   }
 
   async getCase(id: number): Promise<Case | undefined> {
     const [result] = await db.select().from(cases).where(eq(cases.id, id));
+    return result;
+  }
+
+  async getCaseByToken(token: string): Promise<Case | undefined> {
+    const [result] = await db.select().from(cases).where(eq(cases.accessToken, token));
     return result;
   }
 

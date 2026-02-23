@@ -74,7 +74,7 @@ export default function NewCasePage() {
       return res.json();
     },
     onSuccess: (data) => {
-      navigate(`/cases/${data.id}`);
+      navigate(`/cases/${data.accessToken}`);
     },
     onError: (err: Error) => {
       toast({

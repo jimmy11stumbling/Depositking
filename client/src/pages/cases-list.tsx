@@ -102,7 +102,7 @@ export default function CasesListPage() {
                 <Card
                   key={c.id}
                   className="p-4 sm:p-5 cursor-pointer hover-elevate"
-                  onClick={() => navigate(`/cases/${c.id}`)}
+                  onClick={() => navigate(`/cases/${c.accessToken}`)}
                   data-testid={`case-card-${c.id}`}
                 >
                   <div className="flex items-center justify-between gap-3">

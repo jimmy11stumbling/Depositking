@@ -1,13 +1,76 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { STATE_LAWS } from "../shared/stateLaws";
 import { insertCaseSchema, insertDeductionSchema } from "@shared/schema";
-import { runParalegalAgent, runAttorneyAgent, runDrafterAgent, runReviewerAgent } from "./agents";
+import { runParalegalAgent, runAttorneyAgent, runDrafterAgent, runReviewerAgent, withTimeout } from "./agents";
 import { z } from "zod";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
+
+async function resolveCase(req: Request, _res: Response) {
+  const param = req.params.id as string;
+  const id = parseInt(param);
+  let caseData;
+  if (!isNaN(id) && param.length < 10) {
+    caseData = await storage.getCase(id);
+    if (caseData) {
+      const tokenVal = req.query.token || req.headers["x-case-token"];
+      const token = Array.isArray(tokenVal) ? tokenVal[0] : tokenVal;
+      if (!token || token !== caseData.accessToken) {
+        return null;
+      }
+    }
+  } else {
+    caseData = await storage.getCaseByToken(param as string);
+  }
+  return caseData || null;
+}
+
+async function ensureStripeProduct(): Promise<void> {
+  try {
+    const priceResult = await db.execute(
+      sql`SELECT pr.id as price_id FROM stripe.products p 
+          JOIN stripe.prices pr ON pr.product = p.id 
+          WHERE p.name = 'Demand Letter' AND pr.active = true 
+          LIMIT 1`
+    );
+
+    if (priceResult.rows.length > 0) {
+      console.log("Stripe product verified:", priceResult.rows[0].price_id);
+      return;
+    }
+
+    console.log("Demand Letter product not found, creating...");
+    const stripe = await getUncachableStripeClient();
+
+    const existing = await stripe.products.search({ query: "name:'Demand Letter'" });
+    if (existing.data.length > 0) {
+      const prices = await stripe.prices.list({ product: existing.data[0].id, active: true });
+      if (prices.data.length > 0) {
+        console.log("Stripe product exists externally, will sync shortly:", existing.data[0].id);
+        return;
+      }
+    }
+
+    const product = await stripe.products.create({
+      name: "Demand Letter",
+      description: "AI-generated demand letter for security deposit recovery. Includes 4-agent legal analysis, violation detection, penalty calculation, and professionally drafted demand letter with electronic signature.",
+      metadata: { type: "one_time", category: "legal_service" },
+    });
+
+    await stripe.prices.create({
+      product: product.id,
+      unit_amount: 2900,
+      currency: "usd",
+    });
+
+    console.log("Stripe product auto-created:", product.id);
+  } catch (err: any) {
+    console.error("Auto-seed Stripe product failed (non-fatal):", err.message);
+  }
+}
 
 function calculateAnalysis(stateAbbr: string, moveOutDate: string, depositAmount: number, amountReturned: number) {
   const law = STATE_LAWS[stateAbbr];
@@ -49,19 +112,15 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  app.get("/api/cases", async (_req, res) => {
-    try {
-      const allCases = await storage.getAllCases();
-      res.json(allCases);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
+  ensureStripeProduct().catch(err => console.error("Stripe product check failed:", err));
+
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
   app.get("/api/cases/:id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
-      const caseData = await storage.getCase(id);
+      const caseData = await resolveCase(req, res);
       if (!caseData) return res.status(404).json({ error: "Case not found" });
       res.json(caseData);
     } catch (err: any) {
@@ -76,6 +135,24 @@ export async function registerRoutes(
         return res.status(400).json({ error: parsed.error.errors.map(e => e.message).join(", ") });
       }
       const data = parsed.data;
+
+      const depositAmount = parseFloat(data.depositAmount as string);
+      const amountReturned = parseFloat((data.amountReturned as string) || "0");
+      if (depositAmount <= 0) {
+        return res.status(400).json({ error: "Deposit amount must be positive" });
+      }
+      if (amountReturned < 0) {
+        return res.status(400).json({ error: "Amount returned cannot be negative" });
+      }
+      if (amountReturned > depositAmount) {
+        return res.status(400).json({ error: "Amount returned cannot exceed deposit amount" });
+      }
+
+      const moveOut = new Date(data.moveOutDate);
+      if (isNaN(moveOut.getTime())) {
+        return res.status(400).json({ error: "Invalid move-out date" });
+      }
+
       const newCase = await storage.createCase(data);
 
       const analysis = calculateAnalysis(
@@ -102,8 +179,7 @@ export async function registerRoutes(
 
   app.get("/api/cases/:id/analysis", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
-      const caseData = await storage.getCase(id);
+      const caseData = await resolveCase(req, res);
       if (!caseData) return res.status(404).json({ error: "Case not found" });
 
       const analysis = calculateAnalysis(
@@ -122,8 +198,9 @@ export async function registerRoutes(
 
   app.get("/api/cases/:id/deductions", async (req, res) => {
     try {
-      const caseId = parseInt(req.params.id);
-      const deductionsList = await storage.getDeductionsByCase(caseId);
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      const deductionsList = await storage.getDeductionsByCase(caseData.id);
       res.json(deductionsList);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -132,8 +209,9 @@ export async function registerRoutes(
 
   app.post("/api/cases/:id/deductions", async (req, res) => {
     try {
-      const caseId = parseInt(req.params.id);
-      const parsed = insertDeductionSchema.safeParse({ ...req.body, caseId });
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      const parsed = insertDeductionSchema.safeParse({ ...req.body, caseId: caseData.id });
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors.map(e => e.message).join(", ") });
       }
@@ -146,6 +224,8 @@ export async function registerRoutes(
 
   app.delete("/api/cases/:id/deductions/:deductionId", async (req, res) => {
     try {
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
       const deductionId = parseInt(req.params.deductionId);
       await storage.deleteDeduction(deductionId);
       res.status(204).send();
@@ -156,8 +236,9 @@ export async function registerRoutes(
 
   app.get("/api/cases/:id/letter", async (req, res) => {
     try {
-      const caseId = parseInt(req.params.id);
-      const letter = await storage.getLetterByCase(caseId);
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      const letter = await storage.getLetterByCase(caseData.id);
       if (!letter) return res.status(404).json({ error: "No letter found" });
       res.json(letter);
     } catch (err: any) {
@@ -166,8 +247,6 @@ export async function registerRoutes(
   });
 
   app.get("/api/cases/:id/generate", async (req, res) => {
-    const caseId = parseInt(req.params.id);
-
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -178,12 +257,13 @@ export async function registerRoutes(
     };
 
     try {
-      const caseData = await storage.getCase(caseId);
+      const caseData = await resolveCase(req, res);
       if (!caseData) {
-        send({ status: "error", message: "Case not found" });
+        send({ status: "error", message: "Case not found or access denied" });
         res.end();
         return;
       }
+      const caseId = caseData.id;
 
       if (!caseData.paid) {
         send({ status: "error", message: "Payment required before generating letter" });
@@ -202,6 +282,10 @@ export async function registerRoutes(
         send({ status: "error", message: "Letter already generated. View it from your case dashboard." });
         res.end();
         return;
+      }
+
+      if (caseData.status === "generating") {
+        await storage.updateCase(caseId, { status: "analysis" });
       }
 
       const law = STATE_LAWS[caseData.state];
@@ -262,7 +346,7 @@ export async function registerRoutes(
       send({ agent: "paralegal", status: "running", message: `Researching statutes for ${law.state}...` });
       let statuteSummary: any;
       try {
-        statuteSummary = await runParalegalAgent(agentCaseData);
+        statuteSummary = await withTimeout(runParalegalAgent(agentCaseData), 60000, "Paralegal agent");
         send({
           agent: "paralegal",
           status: "complete",
@@ -290,7 +374,7 @@ export async function registerRoutes(
       send({ agent: "attorney", status: "running", message: "Assessing case strength..." });
       let strategyBrief: any;
       try {
-        strategyBrief = await runAttorneyAgent(agentCaseData, statuteSummary);
+        strategyBrief = await withTimeout(runAttorneyAgent(agentCaseData, statuteSummary), 60000, "Attorney agent");
         send({
           agent: "attorney",
           status: "complete",
@@ -323,7 +407,7 @@ export async function registerRoutes(
       send({ agent: "drafter", status: "running", message: "Drafting authoritative letter..." });
       let draftHtml: string;
       try {
-        draftHtml = await runDrafterAgent(agentCaseData, statuteSummary, strategyBrief);
+        draftHtml = await withTimeout(runDrafterAgent(agentCaseData, statuteSummary, strategyBrief), 90000, "Drafter agent");
         send({ agent: "drafter", status: "complete", message: "Draft complete", confidence: 90 });
       } catch (err: any) {
         console.error("Drafter agent error:", err);
@@ -334,7 +418,7 @@ export async function registerRoutes(
       send({ agent: "reviewer", status: "running", message: "Reviewing for accuracy..." });
       let reviewResult: any;
       try {
-        reviewResult = await runReviewerAgent(draftHtml, statuteSummary, strategyBrief);
+        reviewResult = await withTimeout(runReviewerAgent(draftHtml, statuteSummary, strategyBrief), 60000, "Reviewer agent");
         send({
           agent: "reviewer",
           status: "complete",
@@ -370,7 +454,10 @@ export async function registerRoutes(
       res.end();
     } catch (err: any) {
       console.error("Generation pipeline error:", err);
-      await storage.updateCase(caseId, { status: "analysis" });
+      const resolvedCase = await resolveCase(req, res);
+      if (resolvedCase) {
+        await storage.updateCase(resolvedCase.id, { status: "analysis" });
+      }
       send({ status: "error", message: err.message || "Generation failed" });
       res.end();
     }
@@ -378,9 +465,9 @@ export async function registerRoutes(
 
   app.post("/api/cases/:id/sign", async (req, res) => {
     try {
-      const caseId = parseInt(req.params.id);
-      const caseData = await storage.getCase(caseId);
+      const caseData = await resolveCase(req, res);
       if (!caseData) return res.status(404).json({ error: "Case not found" });
+      const caseId = caseData.id;
       if (caseData.status === "signed") {
         return res.status(400).json({ error: "This case has already been signed" });
       }
@@ -412,8 +499,9 @@ export async function registerRoutes(
 
   app.get("/api/cases/:id/signature", async (req, res) => {
     try {
-      const caseId = parseInt(req.params.id);
-      const signature = await storage.getSignatureByCase(caseId);
+      const caseData = await resolveCase(req, res);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      const signature = await storage.getSignatureByCase(caseData.id);
       if (!signature) return res.status(404).json({ error: "No signature found" });
       res.json(signature);
     } catch (err: any) {
@@ -443,9 +531,9 @@ export async function registerRoutes(
 
   app.post("/api/cases/:id/checkout", async (req, res) => {
     try {
-      const caseId = parseInt(req.params.id);
-      const caseData = await storage.getCase(caseId);
+      const caseData = await resolveCase(req, res);
       if (!caseData) return res.status(404).json({ error: "Case not found" });
+      const caseId = caseData.id;
       if (caseData.paid) return res.json({ alreadyPaid: true });
 
       const stripe = await getUncachableStripeClient();
@@ -469,8 +557,8 @@ export async function registerRoutes(
         payment_method_types: ['card'],
         line_items: [{ price: priceId, quantity: 1 }],
         mode: 'payment',
-        success_url: `${protocol}://${host}/cases/${caseId}/generate?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${protocol}://${host}/cases/${caseId}`,
+        success_url: `${protocol}://${host}/cases/${caseData.accessToken}/generate?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${protocol}://${host}/cases/${caseData.accessToken}`,
         metadata: { caseId: caseId.toString() },
       });
 
@@ -485,11 +573,10 @@ export async function registerRoutes(
 
   app.post("/api/cases/:id/verify-payment", async (req, res) => {
     try {
-      const caseId = parseInt(req.params.id);
-      const { sessionId } = req.body;
-
-      const caseData = await storage.getCase(caseId);
+      const caseData = await resolveCase(req, res);
       if (!caseData) return res.status(404).json({ error: "Case not found" });
+      const caseId = caseData.id;
+      const { sessionId } = req.body;
       if (caseData.paid) return res.json({ paid: true });
 
       if (!sessionId) return res.json({ paid: false });

@@ -5,6 +5,8 @@ import { createServer } from "http";
 import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './stripeClient';
 import { WebhookHandlers } from './webhookHandlers';
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -79,6 +81,40 @@ app.post(
     }
   }
 );
+
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later." },
+  skip: (req) => !req.path.startsWith("/api"),
+});
+
+const generationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Letter generation limit reached. Please try again later." },
+});
+
+const checkoutLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many checkout attempts. Please try again later." },
+});
+
+app.use("/api/", apiLimiter);
+app.use("/api/cases/:id/generate", generationLimiter);
+app.use("/api/cases/:id/checkout", checkoutLimiter);
 
 app.use(
   express.json({

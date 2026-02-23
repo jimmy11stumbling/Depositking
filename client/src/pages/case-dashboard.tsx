@@ -37,28 +37,32 @@ function formatDate(dateStr: string): string {
 
 export default function CaseDashboard() {
   const params = useParams<{ id: string }>();
-  const caseId = parseInt(params.id);
+  const caseToken = params.id;
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [newDeduction, setNewDeduction] = useState({ description: "", amount: "", disputeReason: "" });
 
-  usePageTitle(`Case #${caseId} Dashboard`);
-
   const { data: caseData, isLoading: caseLoading } = useQuery<Case>({
-    queryKey: ["/api/cases", caseId],
+    queryKey: ["/api/cases", caseToken],
   });
 
+  const caseId = caseData?.id;
+
+  usePageTitle(caseId ? `Case #${caseId} Dashboard` : "Case Dashboard");
+
   const { data: analysis, isLoading: analysisLoading } = useQuery<CaseAnalysis>({
-    queryKey: ["/api/cases", caseId, "analysis"],
+    queryKey: ["/api/cases", caseToken, "analysis"],
+    enabled: !!caseData,
   });
 
   const { data: deductionsData, isLoading: deductionsLoading } = useQuery<Deduction[]>({
-    queryKey: ["/api/cases", caseId, "deductions"],
+    queryKey: ["/api/cases", caseToken, "deductions"],
+    enabled: !!caseData,
   });
 
   const addDeduction = useMutation({
     mutationFn: async (data: { description: string; amount: string; disputeReason: string }) => {
-      const res = await apiRequest("POST", `/api/cases/${caseId}/deductions`, {
+      const res = await apiRequest("POST", `/api/cases/${caseToken}/deductions`, {
         caseId,
         description: data.description,
         amount: data.amount,
@@ -67,7 +71,7 @@ export default function CaseDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseId, "deductions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken, "deductions"] });
       setNewDeduction({ description: "", amount: "", disputeReason: "" });
     },
     onError: (err: Error) => {
@@ -77,21 +81,21 @@ export default function CaseDashboard() {
 
   const deleteDeduction = useMutation({
     mutationFn: async (deductionId: number) => {
-      await apiRequest("DELETE", `/api/cases/${caseId}/deductions/${deductionId}`);
+      await apiRequest("DELETE", `/api/cases/${caseToken}/deductions/${deductionId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseId, "deductions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken, "deductions"] });
     },
   });
 
   const checkout = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/cases/${caseId}/checkout`);
+      const res = await apiRequest("POST", `/api/cases/${caseToken}/checkout`);
       return res.json();
     },
     onSuccess: (data) => {
       if (data.alreadyPaid) {
-        navigate(`/cases/${caseId}/generate`);
+        navigate(`/cases/${caseToken}/generate`);
       } else if (data.url) {
         window.location.href = data.url;
       }
@@ -338,7 +342,7 @@ export default function CaseDashboard() {
               <div className="flex gap-2 flex-shrink-0">
                 <Button
                   data-testid="button-view-signed-letter"
-                  onClick={() => navigate(`/cases/${caseId}/letter`)}
+                  onClick={() => navigate(`/cases/${caseToken}/letter`)}
                   className="bg-[#1E3A5F] text-white"
                 >
                   <Eye className="mr-2 h-4 w-4" />
@@ -348,7 +352,7 @@ export default function CaseDashboard() {
                   variant="outline"
                   data-testid="button-print-letter"
                   onClick={() => {
-                    navigate(`/cases/${caseId}/letter`);
+                    navigate(`/cases/${caseToken}/letter`);
                     setTimeout(() => window.print(), 500);
                   }}
                 >
@@ -375,7 +379,7 @@ export default function CaseDashboard() {
               <Button
                 size="lg"
                 data-testid="button-review-sign-letter"
-                onClick={() => navigate(`/cases/${caseId}/letter`)}
+                onClick={() => navigate(`/cases/${caseToken}/letter`)}
                 className="bg-[#C9A84C] text-white border-[#b8963f] text-base px-8 whitespace-nowrap"
               >
                 <FileText className="mr-2 h-4 w-4" />
@@ -400,7 +404,7 @@ export default function CaseDashboard() {
                 <Button
                   size="lg"
                   data-testid="button-generate-letter"
-                  onClick={() => navigate(`/cases/${caseId}/generate`)}
+                  onClick={() => navigate(`/cases/${caseToken}/generate`)}
                   className="bg-[#C9A84C] text-white border-[#b8963f] text-base px-8 whitespace-nowrap"
                 >
                   <Sparkles className="mr-2 h-4 w-4" />

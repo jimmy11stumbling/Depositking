@@ -5,6 +5,7 @@ import { z } from "zod";
 
 export const cases = pgTable("cases", {
   id: serial("id").primaryKey(),
+  accessToken: varchar("access_token", { length: 64 }).notNull().unique(),
   state: varchar("state", { length: 2 }).notNull(),
   moveOutDate: text("move_out_date").notNull(),
   depositAmount: decimal("deposit_amount", { precision: 10, scale: 2 }).notNull(),
@@ -52,6 +53,7 @@ export const signatures = pgTable("signatures", {
 
 export const insertCaseSchema = createInsertSchema(cases).omit({
   id: true,
+  accessToken: true,
   createdAt: true,
   status: true,
   potentialRecovery: true,

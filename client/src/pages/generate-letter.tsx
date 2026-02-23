@@ -27,7 +27,7 @@ const agentOrder = ["paralegal", "attorney", "drafter", "reviewer"];
 
 export default function GenerateLetterPage() {
   const params = useParams<{ id: string }>();
-  const caseId = parseInt(params.id);
+  const caseToken = params.id;
   const [, navigate] = useLocation();
   const searchString = useSearch();
   const searchParams = new URLSearchParams(searchString);
@@ -40,22 +40,24 @@ export default function GenerateLetterPage() {
   const [verifyingPayment, setVerifyingPayment] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  usePageTitle(`Generate Letter - Case #${caseId}`);
-
   const { data: caseData, isLoading } = useQuery<Case>({
-    queryKey: ["/api/cases", caseId],
+    queryKey: ["/api/cases", caseToken],
   });
+
+  const caseId = caseData?.id;
+
+  usePageTitle(caseId ? `Generate Letter - Case #${caseId}` : "Generate Letter");
 
   useEffect(() => {
     if (!caseData) return;
 
     if (caseData.status === "signed") {
-      navigate(`/cases/${caseId}/letter`);
+      navigate(`/cases/${caseToken}/letter`);
       return;
     }
 
     if (caseData.status === "generated") {
-      navigate(`/cases/${caseId}/letter`);
+      navigate(`/cases/${caseToken}/letter`);
       return;
     }
 
@@ -65,22 +67,22 @@ export default function GenerateLetterPage() {
     }
     if (sessionId && !paymentVerified) {
       setVerifyingPayment(true);
-      apiRequest("POST", `/api/cases/${caseId}/verify-payment`, { sessionId })
+      apiRequest("POST", `/api/cases/${caseToken}/verify-payment`, { sessionId })
         .then((res) => res.json())
         .then((data) => {
           if (data.paid) {
             setPaymentVerified(true);
-            queryClient.invalidateQueries({ queryKey: ["/api/cases", caseId] });
+            queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken] });
           } else {
-            navigate(`/cases/${caseId}`);
+            navigate(`/cases/${caseToken}`);
           }
         })
-        .catch(() => navigate(`/cases/${caseId}`))
+        .catch(() => navigate(`/cases/${caseToken}`))
         .finally(() => setVerifyingPayment(false));
     } else if (!sessionId && !caseData.paid) {
-      navigate(`/cases/${caseId}`);
+      navigate(`/cases/${caseToken}`);
     }
-  }, [caseData, sessionId, paymentVerified, navigate, caseId]);
+  }, [caseData, sessionId, paymentVerified, navigate, caseToken]);
 
   const startGeneration = () => {
     setIsGenerating(true);
@@ -88,7 +90,7 @@ export default function GenerateLetterPage() {
     setIsDone(false);
     setAgentStatuses({});
 
-    const eventSource = new EventSource(`/api/cases/${caseId}/generate`);
+    const eventSource = new EventSource(`/api/cases/${caseToken}/generate`);
     eventSourceRef.current = eventSource;
 
     eventSource.onmessage = (event) => {
@@ -99,7 +101,7 @@ export default function GenerateLetterPage() {
           setIsDone(true);
           setIsGenerating(false);
           eventSource.close();
-          queryClient.invalidateQueries({ queryKey: ["/api/cases", caseId] });
+          queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken] });
           return;
         }
 
@@ -165,7 +167,7 @@ export default function GenerateLetterPage() {
       <header className="border-b bg-background/95 backdrop-blur sticky top-0 z-50">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2">
           <button
-            onClick={() => navigate(`/cases/${caseId}`)}
+            onClick={() => navigate(`/cases/${caseToken}`)}
             className="flex items-center gap-2 text-muted-foreground hover-elevate rounded-md px-2 py-1"
             data-testid="button-back-dashboard"
           >
@@ -306,7 +308,7 @@ export default function GenerateLetterPage() {
               >
                 <Button
                   size="lg"
-                  onClick={() => navigate(`/cases/${caseId}/letter`)}
+                  onClick={() => navigate(`/cases/${caseToken}/letter`)}
                   data-testid="button-view-letter"
                   className="bg-[#C9A84C] text-white border-[#b8963f] text-base px-10"
                 >
