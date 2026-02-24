@@ -751,32 +751,15 @@ export default function CaseDashboard() {
                     : "Our AI legal team will research, analyze, and draft your letter for $29."}
                 </p>
               </div>
-              {caseData.paid ? (
-                <Button
-                  size="lg"
-                  data-testid="button-generate-letter"
-                  onClick={() => navigate(`/cases/${caseToken}/generate`)}
-                  className="bg-[#C9A84C] text-white border-[#b8963f] text-base px-8 whitespace-nowrap"
-                >
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Generate Letter
-                </Button>
-              ) : (
-                <Button
-                  size="lg"
-                  data-testid="button-pay-generate"
-                  onClick={() => checkout.mutate()}
-                  disabled={checkout.isPending}
-                  className="bg-[#C9A84C] text-white border-[#b8963f] text-base px-8 whitespace-nowrap"
-                >
-                  {checkout.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <CreditCard className="mr-2 h-4 w-4" />
-                  )}
-                  {checkout.isPending ? "Processing..." : "Pay $29 & Generate Letter"}
-                </Button>
-              )}
+              <Button
+                size="lg"
+                data-testid="button-generate-letter"
+                onClick={() => navigate(`/cases/${caseToken}/generate`)}
+                className="bg-[#C9A84C] text-white border-[#b8963f] text-base px-8 whitespace-nowrap"
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                Generate Letter (Test Mode)
+              </Button>
             </div>
           </Card>
         )}
