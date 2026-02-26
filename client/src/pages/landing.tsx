@@ -309,7 +309,7 @@ function FAQItem({ question, answer, index }: { question: string; answer: string
 
 export default function LandingPage() {
   const [, navigate] = useLocation();
-  usePageTitle(undefined, "TenantAdvocate helps renters recover security deposits withheld unfairly. AI-powered demand letters, 50-state coverage, penalty calculators, evidence vault, certified mail, and small claims court prep. $29 flat fee.");
+  usePageTitle(undefined, "TenantAdvocate: Get your security deposit back with AI legal demand letters. 50-state coverage, penalty calculation, and certified mail delivery for tenants.");
   const { scrollY } = useScroll();
   const heroOpacity = useTransform(scrollY, [0, 400], [1, 0]);
   const heroScale = useTransform(scrollY, [0, 400], [1, 0.97]);
