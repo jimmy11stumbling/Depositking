@@ -255,21 +255,6 @@ export default function CaseDashboard() {
     },
   });
 
-  // TEST MODE: bypass mail payment
-  const testMailActivate = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/cases/${caseToken}/verify-mail-payment`, {});
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken] });
-      toast({ title: "Test Mode", description: "Mail payment bypassed. You can now send the letter." });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
-  });
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const mailSessionId = params.get("mail_session_id");
@@ -769,11 +754,16 @@ export default function CaseDashboard() {
               <Button
                 size="lg"
                 data-testid="button-generate-letter"
-                onClick={() => navigate(`/cases/${caseToken}/generate`)}
+                onClick={() => caseData.paid ? navigate(`/cases/${caseToken}/generate`) : checkout.mutate()}
+                disabled={checkout.isPending}
                 className="bg-[#C9A84C] text-white border-[#b8963f] text-base px-8 whitespace-nowrap"
               >
-                <Sparkles className="mr-2 h-4 w-4" />
-                Generate Letter (Test Mode)
+                {checkout.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 h-4 w-4" />
+                )}
+                {checkout.isPending ? "Processing..." : caseData.paid ? "Generate Letter" : "Pay $29 — Generate Letter"}
               </Button>
             </div>
           </Card>
@@ -808,17 +798,17 @@ export default function CaseDashboard() {
                   </div>
                   {!caseData.mailPaid ? (
                     <Button
-                      onClick={() => testMailActivate.mutate()}
-                      disabled={testMailActivate.isPending}
+                      onClick={() => mailCheckout.mutate()}
+                      disabled={mailCheckout.isPending}
                       className="bg-[#C9A84C] text-white border-[#b8963f] whitespace-nowrap"
                       data-testid="button-pay-certified-mail"
                     >
-                      {testMailActivate.isPending ? (
+                      {mailCheckout.isPending ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : (
-                        <Mail className="mr-2 h-4 w-4" />
+                        <CreditCard className="mr-2 h-4 w-4" />
                       )}
-                      {testMailActivate.isPending ? "Activating..." : "Activate Certified Mail (Test Mode)"}
+                      {mailCheckout.isPending ? "Processing..." : "Pay $12 — Send via Certified Mail"}
                     </Button>
                   ) : (
                     <Button

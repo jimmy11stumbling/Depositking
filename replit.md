@@ -85,7 +85,9 @@ AI-powered legal technology platform that helps residential tenants recover secu
 ## Deployment Notes
 - **Integrations required**: Replit Gemini AI integration + Replit Stripe connector (both configured)
 - **Build output**: ESM format (`dist/index.js`) to support top-level async initialization
-- **Payment gate**: Enforced — letter generation requires `paid: true` on the case
-- **LOB_API_KEY**: Optional env var for USPS Certified Mail feature via Lob.com. Without it, the send-letter endpoint returns a 503 with a clear error message
+- **Payment gate**: ENFORCED — all payment checks are live. Letter generation requires `paid: true`, signing requires `paid: true`, certified mail requires `mailPaid: true`
+- **LOB_API_KEY**: Configured in Replit Secrets. Required for USPS Certified Mail. Without it, send-letter returns 503.
 - **Database**: PostgreSQL via Drizzle ORM — run `npm run db:push` after schema changes
 - **Session**: localStorage-based case tokens (no server sessions needed)
+- **Legal pages**: `/privacy` (Privacy Policy) and `/terms` (Terms of Service) — both live and linked from footer
+- **Support contact**: support@tenantadvocate.com shown in footer

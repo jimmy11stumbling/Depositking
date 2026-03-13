@@ -62,8 +62,32 @@ export default function GenerateLetterPage() {
       return;
     }
 
-    // TESTING MODE: Skip payment verification
-    setPaymentVerified(true);
+    if (caseData.paid) {
+      setPaymentVerified(true);
+      return;
+    }
+
+    if (!sessionId || paymentVerified) {
+      navigate(`/cases/${caseToken}`);
+      return;
+    }
+
+    setVerifyingPayment(true);
+    apiRequest("POST", `/api/cases/${caseToken}/verify-payment`, { sessionId })
+      .then((res) => res.json())
+      .then((data) => {
+        setVerifyingPayment(false);
+        if (data.paid) {
+          setPaymentVerified(true);
+          queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken] });
+        } else {
+          navigate(`/cases/${caseToken}`);
+        }
+      })
+      .catch(() => {
+        setVerifyingPayment(false);
+        navigate(`/cases/${caseToken}`);
+      });
   }, [caseData, sessionId, paymentVerified, navigate, caseToken]);
 
   const startGeneration = () => {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -897,6 +897,17 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="border-t pt-6 space-y-4">
+            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+              <a href="mailto:support@tenantadvocate.com" className="hover:text-foreground transition-colors">
+                support@tenantadvocate.com
+              </a>
+              <span className="w-1 h-1 rounded-full bg-muted-foreground/30 hidden sm:block" />
+              <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
+              <span className="w-1 h-1 rounded-full bg-muted-foreground/30 hidden sm:block" />
+              <Link href="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
+              <span className="w-1 h-1 rounded-full bg-muted-foreground/30 hidden sm:block" />
+              <span>© {new Date().getFullYear()} TenantAdvocate</span>
+            </div>
             <p className="text-[11px] text-muted-foreground text-center max-w-3xl mx-auto leading-relaxed">
               TenantAdvocate is the leading AI-powered security deposit recovery platform for renters across the United States.
               We help tenants in all 50 states recover deposits withheld unfairly or returned past statutory deadlines.
