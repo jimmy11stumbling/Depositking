@@ -405,11 +405,12 @@ export async function registerRoutes(
       }
       const caseId = caseData.id;
 
-      if (!caseData.paid) {
-        send({ status: "error", message: "Payment required before generating letter" });
-        res.end();
-        return;
-      }
+      // TEST MODE: Payment check disabled
+      // if (!caseData.paid) {
+      //   send({ status: "error", message: "Payment required before generating letter" });
+      //   res.end();
+      //   return;
+      // }
 
       if (caseData.status === "signed") {
         send({ status: "error", message: "This case has already been signed and finalized" });
@@ -610,7 +611,8 @@ export async function registerRoutes(
       if (caseData.status === "signed") {
         return res.status(400).json({ error: "Cannot edit a signed letter" });
       }
-      if (!caseData.paid || caseData.status !== "generated") {
+      // TEST MODE: Payment check disabled
+      if (caseData.status !== "generated") {
         return res.status(400).json({ error: "Letter can only be edited after generation" });
       }
 
@@ -657,9 +659,10 @@ export async function registerRoutes(
       if (caseData.status === "signed") {
         return res.status(400).json({ error: "This case has already been signed" });
       }
-      if (!caseData.paid) {
-        return res.status(403).json({ error: "Payment required" });
-      }
+      // TEST MODE: Payment check disabled
+      // if (!caseData.paid) {
+      //   return res.status(403).json({ error: "Payment required" });
+      // }
 
       const letter = await storage.getLetterByCase(caseId);
       if (!letter) {
@@ -761,28 +764,12 @@ export async function registerRoutes(
       const caseData = await resolveCase(req, res);
       if (!caseData) return res.status(404).json({ error: "Case not found" });
       const caseId = caseData.id;
-      const { sessionId } = req.body;
-      if (caseData.paid) return res.json({ paid: true });
 
-      if (!sessionId) return res.json({ paid: false });
-
-      if (caseData.stripeSessionId && caseData.stripeSessionId !== sessionId) {
-        return res.status(403).json({ error: "Session does not match this case" });
+      // TEST MODE: Auto-mark as paid without Stripe verification
+      if (!caseData.paid) {
+        await storage.updateCase(caseId, { paid: true });
       }
-
-      const stripe = await getUncachableStripeClient();
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-      if (session.metadata?.caseId !== caseId.toString()) {
-        return res.status(403).json({ error: "Session does not belong to this case" });
-      }
-
-      if (session.payment_status === 'paid') {
-        await storage.updateCase(caseId, { paid: true, stripeSessionId: sessionId });
-        return res.json({ paid: true });
-      }
-
-      res.json({ paid: false });
+      return res.json({ paid: true });
     } catch (err: any) {
       safeError(res, err, "Verify payment error");
     }
@@ -833,28 +820,12 @@ export async function registerRoutes(
     try {
       const caseData = await resolveCase(req, res);
       if (!caseData) return res.status(404).json({ error: "Case not found" });
-      const { sessionId } = req.body;
-      if (caseData.mailPaid) return res.json({ paid: true });
 
-      if (!sessionId) return res.json({ paid: false });
-
-      if (caseData.mailStripeSessionId && caseData.mailStripeSessionId !== sessionId) {
-        return res.status(403).json({ error: "Session does not match this case" });
+      // TEST MODE: Auto-mark mail as paid without Stripe verification
+      if (!caseData.mailPaid) {
+        await storage.updateCase(caseData.id, { mailPaid: true });
       }
-
-      const stripe = await getUncachableStripeClient();
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-      if (session.metadata?.caseId !== caseData.id.toString()) {
-        return res.status(403).json({ error: "Session does not belong to this case" });
-      }
-
-      if (session.payment_status === 'paid') {
-        await storage.updateCase(caseData.id, { mailPaid: true, mailStripeSessionId: sessionId });
-        return res.json({ paid: true });
-      }
-
-      res.json({ paid: false });
+      return res.json({ paid: true });
     } catch (err: any) {
       safeError(res, err, "Verify mail payment error");
     }
@@ -996,8 +967,9 @@ export async function registerRoutes(
       const caseData = await resolveCase(req, res);
       if (!caseData) return res.status(404).json({ error: "Case not found" });
       if (caseData.status !== "signed") return res.status(400).json({ error: "Letter must be signed before sending" });
-      if (!caseData.paid) return res.status(403).json({ error: "Payment required" });
-      if (!caseData.mailPaid) return res.status(403).json({ error: "Certified mail payment required. Pay $12 to send via USPS Certified Mail." });
+      // TEST MODE: Payment checks disabled
+      // if (!caseData.paid) return res.status(403).json({ error: "Payment required" });
+      // if (!caseData.mailPaid) return res.status(403).json({ error: "Certified mail payment required. Pay $12 to send via USPS Certified Mail." });
 
       const existingDeliveries = await storage.getDeliveriesByCase(caseData.id);
       if (existingDeliveries.length > 0) {
