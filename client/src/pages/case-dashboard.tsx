@@ -255,6 +255,21 @@ export default function CaseDashboard() {
     },
   });
 
+  // TEST MODE: bypass mail payment
+  const testMailActivate = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/cases/${caseToken}/verify-mail-payment`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken] });
+      toast({ title: "Test Mode", description: "Mail payment bypassed. You can now send the letter." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const mailSessionId = params.get("mail_session_id");
@@ -793,17 +808,17 @@ export default function CaseDashboard() {
                   </div>
                   {!caseData.mailPaid ? (
                     <Button
-                      onClick={() => mailCheckout.mutate()}
-                      disabled={mailCheckout.isPending}
+                      onClick={() => testMailActivate.mutate()}
+                      disabled={testMailActivate.isPending}
                       className="bg-[#C9A84C] text-white border-[#b8963f] whitespace-nowrap"
                       data-testid="button-pay-certified-mail"
                     >
-                      {mailCheckout.isPending ? (
+                      {testMailActivate.isPending ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : (
-                        <CreditCard className="mr-2 h-4 w-4" />
+                        <Mail className="mr-2 h-4 w-4" />
                       )}
-                      {mailCheckout.isPending ? "Processing..." : "Pay $12 — Send via Certified Mail"}
+                      {testMailActivate.isPending ? "Activating..." : "Activate Certified Mail (Test Mode)"}
                     </Button>
                   ) : (
                     <Button

@@ -1012,7 +1012,7 @@ export async function registerRoutes(
           },
           file: `<html><body style="font-family:serif;font-size:12pt;line-height:1.6;margin:1in">${letter.finalHtml}${signature ? `<p style="margin-top:40px"><img src="${signature.signatureBase64}" style="max-height:60px" /></p>` : ""}</body></html>`,
           color: false,
-          mail_type: "usps_standard",
+          mail_type: "usps_first_class",
           extra_service: "certified",
           return_envelope: false,
         }),
