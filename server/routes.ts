@@ -405,12 +405,11 @@ export async function registerRoutes(
       }
       const caseId = caseData.id;
 
-      // TESTING MODE: Payment check disabled for testing
-      // if (!caseData.paid) {
-      //   send({ status: "error", message: "Payment required before generating letter" });
-      //   res.end();
-      //   return;
-      // }
+      if (!caseData.paid) {
+        send({ status: "error", message: "Payment required before generating letter" });
+        res.end();
+        return;
+      }
 
       if (caseData.status === "signed") {
         send({ status: "error", message: "This case has already been signed and finalized" });

@@ -80,3 +80,12 @@ AI-powered legal technology platform that helps residential tenants recover secu
 ## Running
 - `npm run dev` starts Express + Vite on port 5000
 - `npm run db:push` pushes schema to database
+- `npm run build` builds the production bundle (client → `dist/public/`, server → `dist/index.js`)
+
+## Deployment Notes
+- **Integrations required**: Replit Gemini AI integration + Replit Stripe connector (both configured)
+- **Build output**: ESM format (`dist/index.js`) to support top-level async initialization
+- **Payment gate**: Enforced — letter generation requires `paid: true` on the case
+- **LOB_API_KEY**: Optional env var for USPS Certified Mail feature via Lob.com. Without it, the send-letter endpoint returns a 503 with a clear error message
+- **Database**: PostgreSQL via Drizzle ORM — run `npm run db:push` after schema changes
+- **Session**: localStorage-based case tokens (no server sessions needed)
