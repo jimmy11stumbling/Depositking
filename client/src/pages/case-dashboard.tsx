@@ -1129,16 +1129,12 @@ export default function CaseDashboard() {
               <Button
                 size="lg"
                 data-testid="button-generate-letter"
-                onClick={() => caseData.paid ? navigate(`/cases/${caseToken}/generate`) : checkout.mutate()}
-                disabled={checkout.isPending}
+                onClick={() => navigate(`/cases/${caseToken}/generate`)}
+                disabled={false} // ⚠️ TEST MODE
                 className="bg-[#C9A84C] text-white border-[#b8963f] text-base px-8 whitespace-nowrap"
               >
-                {checkout.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="mr-2 h-4 w-4" />
-                )}
-                {checkout.isPending ? "Processing..." : caseData.paid ? "Generate Letter" : "Pay $29 — Generate Letter"}
+                <Sparkles className="mr-2 h-4 w-4" />
+                {caseData.paid ? "Generate Letter" : "Generate Letter (Test Mode)"}
               </Button>
             </div>
           </Card>

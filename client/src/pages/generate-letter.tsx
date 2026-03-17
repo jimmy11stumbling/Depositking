@@ -62,32 +62,10 @@ export default function GenerateLetterPage() {
       return;
     }
 
-    if (caseData.paid) {
-      setPaymentVerified(true);
-      return;
-    }
-
-    if (!sessionId || paymentVerified) {
-      navigate(`/cases/${caseToken}`);
-      return;
-    }
-
-    setVerifyingPayment(true);
-    apiRequest("POST", `/api/cases/${caseToken}/verify-payment`, { sessionId })
-      .then((res) => res.json())
-      .then((data) => {
-        setVerifyingPayment(false);
-        if (data.paid) {
-          setPaymentVerified(true);
-          queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken] });
-        } else {
-          navigate(`/cases/${caseToken}`);
-        }
-      })
-      .catch(() => {
-        setVerifyingPayment(false);
-        navigate(`/cases/${caseToken}`);
-      });
+    // ⚠️ TEST MODE — remove this block and restore original before going live
+    setPaymentVerified(true);
+    return;
+    // END TEST MODE
   }, [caseData, sessionId, paymentVerified, navigate, caseToken]);
 
   const startGeneration = () => {

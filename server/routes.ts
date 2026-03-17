@@ -12,6 +12,9 @@ import { db } from "./db";
 import multer from "multer";
 import crypto from "crypto";
 
+// ⚠️ TEST MODE — set to false before going live
+const TEST_MODE = true;
+
 function safeError(res: Response, err: any, context: string, status = 500) {
   console.error(`${context}:`, err);
   res.status(status).json({ error: "An internal error occurred. Please try again." });
@@ -405,7 +408,7 @@ export async function registerRoutes(
       }
       const caseId = caseData.id;
 
-      if (!caseData.paid) {
+      if (!TEST_MODE && !caseData.paid) {
         send({ status: "error", message: "Payment required before generating letter" });
         res.end();
         return;
@@ -610,7 +613,7 @@ export async function registerRoutes(
       if (caseData.status === "signed") {
         return res.status(400).json({ error: "Cannot edit a signed letter" });
       }
-      if (!caseData.paid) {
+      if (!TEST_MODE && !caseData.paid) {
         return res.status(403).json({ error: "Payment required" });
       }
       if (caseData.status !== "generated") {
@@ -660,7 +663,7 @@ export async function registerRoutes(
       if (caseData.status === "signed") {
         return res.status(400).json({ error: "This case has already been signed" });
       }
-      if (!caseData.paid) {
+      if (!TEST_MODE && !caseData.paid) {
         return res.status(403).json({ error: "Payment required" });
       }
 
@@ -999,8 +1002,8 @@ export async function registerRoutes(
       const caseData = await resolveCase(req, res);
       if (!caseData) return res.status(404).json({ error: "Case not found" });
       if (caseData.status !== "signed") return res.status(400).json({ error: "Letter must be signed before sending" });
-      if (!caseData.paid) return res.status(403).json({ error: "Payment required" });
-      if (!caseData.mailPaid) return res.status(403).json({ error: "Certified mail payment required. Pay $12 to send via USPS Certified Mail." });
+      if (!TEST_MODE && !caseData.paid) return res.status(403).json({ error: "Payment required" });
+      if (!TEST_MODE && !caseData.mailPaid) return res.status(403).json({ error: "Certified mail payment required. Pay $12 to send via USPS Certified Mail." });
 
       const existingDeliveries = await storage.getDeliveriesByCase(caseData.id);
       if (existingDeliveries.length > 0) {
