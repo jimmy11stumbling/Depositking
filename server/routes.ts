@@ -997,6 +997,26 @@ export async function registerRoutes(
     }
   });
 
+  function parseUSAddress(raw: string): { line1: string; line2: string; city: string; state: string; zip: string } {
+    const addr = (raw || "").replace(/\r?\n/g, ", ").replace(/\s*,\s*/g, ", ").replace(/\s{2,}/g, " ").trim();
+    const zipMatch = addr.match(/(\d{5}(?:-\d{4})?)\s*$/);
+    const zip = zipMatch?.[1] ?? "";
+    const withoutZip = zip ? addr.slice(0, addr.lastIndexOf(zip)).replace(/,\s*$/, "").trim() : addr;
+    const stateMatch = withoutZip.match(/(?:,\s*|\s+)([A-Z]{2})\s*$/);
+    const state = stateMatch?.[1] ?? "";
+    const withoutState = state ? withoutZip.slice(0, withoutZip.length - stateMatch![0].length).replace(/,\s*$/, "").trim() : withoutZip;
+    const lastCommaIdx = withoutState.lastIndexOf(",");
+    if (lastCommaIdx === -1) {
+      return { line1: withoutState, line2: "", city: "", state, zip };
+    }
+    const city = withoutState.slice(lastCommaIdx + 1).trim();
+    const streetPart = withoutState.slice(0, lastCommaIdx).trim();
+    const streetComma = streetPart.lastIndexOf(",");
+    const line1 = streetComma !== -1 ? streetPart.slice(0, streetComma).trim() : streetPart;
+    const line2 = streetComma !== -1 ? streetPart.slice(streetComma + 1).trim() : "";
+    return { line1, line2, city, state, zip };
+  }
+
   app.post("/api/cases/:id/send-letter", async (req, res) => {
     try {
       const caseData = await resolveCase(req, res);
@@ -1022,6 +1042,56 @@ export async function registerRoutes(
 
       const signature = await storage.getSignatureByCase(caseData.id);
 
+      const toAddr = parseUSAddress(caseData.landlordAddress || "");
+      const fromAddr = parseUSAddress(caseData.tenantAddress || "");
+
+      const addrErrors: string[] = [];
+      if (!toAddr.line1) addrErrors.push("Landlord street address is missing");
+      if (!toAddr.city) addrErrors.push("Landlord city is missing (expected format: 123 Main St, City, ST 12345)");
+      if (!toAddr.zip) addrErrors.push("Landlord ZIP code is missing");
+      if (!fromAddr.line1) addrErrors.push("Your street address is missing");
+      if (!fromAddr.city) addrErrors.push("Your city is missing (expected format: 123 Main St, City, ST 12345)");
+      if (!fromAddr.zip) addrErrors.push("Your ZIP code is missing");
+      if (addrErrors.length > 0) {
+        return res.status(422).json({
+          error: "Address formatting issue — please update your case with a complete address.",
+          details: addrErrors,
+        });
+      }
+
+      const signatureHtml = signature
+        ? `<div style="margin-top:48px"><img src="${signature.signatureBase64}" style="max-height:64px;display:block" alt="Signature" /></div>`
+        : "";
+
+      const printHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Times New Roman", Times, serif; font-size: 12pt; line-height: 1.6; color: #111; background: #fff; padding: 1in; }
+  p { margin-bottom: 12pt; }
+  h1,h2,h3 { font-family: "Times New Roman", Times, serif; }
+  ul, ol { margin-left: 20pt; margin-bottom: 12pt; }
+  li { margin-bottom: 4pt; }
+  strong { font-weight: bold; }
+  em { font-style: italic; }
+  .letter-date { margin-bottom: 24pt; }
+  .letter-via { font-style: italic; margin-bottom: 16pt; border-left: 3px solid #1E3A5F; padding-left: 8pt; color: #1E3A5F; }
+  .letter-re { background: #f5f5f5; border-left: 4px solid #1E3A5F; padding: 8pt 12pt; margin-bottom: 16pt; font-weight: bold; }
+  .letter-close { margin-top: 24pt; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 12pt; }
+  th, td { border: 1px solid #ccc; padding: 6pt 8pt; text-align: left; }
+  th { background: #eee; font-weight: bold; }
+  .disclaimer { margin-top: 36pt; font-size: 9pt; color: #666; border-top: 1px solid #ccc; padding-top: 8pt; }
+</style>
+</head>
+<body>
+${letter.finalHtml}
+${signatureHtml}
+</body>
+</html>`;
+
       const lobResponse = await fetch("https://api.lob.com/v1/letters", {
         method: "POST",
         headers: {
@@ -1029,22 +1099,26 @@ export async function registerRoutes(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          description: `Demand Letter - Case #${caseData.id}`,
+          description: `Security Deposit Demand Letter — Case #${caseData.id}`,
           to: {
             name: caseData.landlordName,
-            address_line1: caseData.landlordAddress?.split("\n")[0] || "",
-            address_city: caseData.landlordAddress?.split(",")[1]?.trim()?.split(" ")[0] || "",
-            address_state: caseData.state,
-            address_zip: caseData.landlordAddress?.match(/\d{5}(-\d{4})?/)?.[0] || "",
+            address_line1: toAddr.line1,
+            ...(toAddr.line2 ? { address_line2: toAddr.line2 } : {}),
+            address_city: toAddr.city,
+            address_state: toAddr.state || caseData.state,
+            address_zip: toAddr.zip,
+            address_country: "US",
           },
           from: {
             name: caseData.tenantName,
-            address_line1: caseData.tenantAddress?.split("\n")[0] || "",
-            address_city: caseData.tenantAddress?.split(",")[1]?.trim()?.split(" ")[0] || "",
-            address_state: caseData.state,
-            address_zip: caseData.tenantAddress?.match(/\d{5}(-\d{4})?/)?.[0] || "",
+            address_line1: fromAddr.line1,
+            ...(fromAddr.line2 ? { address_line2: fromAddr.line2 } : {}),
+            address_city: fromAddr.city,
+            address_state: fromAddr.state || caseData.state,
+            address_zip: fromAddr.zip,
+            address_country: "US",
           },
-          file: `<html><body style="font-family:serif;font-size:12pt;line-height:1.6;margin:1in">${letter.finalHtml}${signature ? `<p style="margin-top:40px"><img src="${signature.signatureBase64}" style="max-height:60px" /></p>` : ""}</body></html>`,
+          file: printHtml,
           color: false,
           mail_type: "usps_first_class",
           extra_service: "certified",

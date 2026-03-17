@@ -150,7 +150,13 @@ export default function LetterPreviewPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken] });
     },
     onError: (err: Error) => {
-      toast({ title: "Send Failed", description: err.message, variant: "destructive" });
+      try {
+        const body = JSON.parse(err.message.replace(/^\d+:\s*/, ""));
+        const details = Array.isArray(body.details) ? body.details.join(" • ") : body.error;
+        toast({ title: "Address Error", description: details, variant: "destructive" });
+      } catch {
+        toast({ title: "Send Failed", description: err.message, variant: "destructive" });
+      }
     },
   });
 
