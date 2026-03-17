@@ -203,17 +203,27 @@ export default function CaseDashboard() {
       const formData = new FormData();
       formData.append("file", file);
       if (evidenceDescription) formData.append("description", evidenceDescription);
-      const res = await fetch(`/api/cases/${caseToken}/evidence?token=${caseToken}`, { method: "POST", body: formData });
+      const res = await fetch(`/api/cases/${caseToken}/evidence`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || res.statusText);
+        let msg = res.statusText;
+        try {
+          const body = await res.json();
+          msg = body.error || msg;
+        } catch {
+          msg = (await res.text().catch(() => "")) || msg;
+        }
+        throw new Error(msg);
       }
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken, "evidence"] });
       setEvidenceDescription("");
-      toast({ title: "Evidence Uploaded", description: "File has been securely stored." });
+      toast({ title: "Evidence Uploaded", description: "File has been securely stored with SHA-256 hash." });
     },
     onError: (err: Error) => {
       toast({ title: "Upload Failed", description: err.message, variant: "destructive" });
@@ -599,8 +609,8 @@ export default function CaseDashboard() {
         toast({ title: "File Too Large", description: "Maximum file size is 10MB.", variant: "destructive" });
         return;
       }
-      const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/gif", "application/pdf"];
-      if (!allowed.includes(file.type)) {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif", "application/pdf"];
+      if (file.type && !allowed.includes(file.type)) {
         toast({ title: "Invalid File Type", description: "Upload images (JPG, PNG, WebP, HEIC, GIF) or PDF documents.", variant: "destructive" });
         return;
       }
@@ -616,8 +626,8 @@ export default function CaseDashboard() {
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
-      const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/gif", "application/pdf"];
-      if (!allowed.includes(file.type)) {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif", "application/pdf"];
+      if (file.type && !allowed.includes(file.type)) {
         toast({ title: "Invalid File Type", description: "Upload images (JPG, PNG, WebP, HEIC, GIF) or PDF documents.", variant: "destructive" });
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
@@ -981,7 +991,7 @@ export default function CaseDashboard() {
               ref={fileInputRef}
               type="file"
               className="hidden"
-              accept="image/jpeg,image/png,image/webp,image/heic,image/gif,application/pdf"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,application/pdf"
               onChange={handleFileSelect}
               data-testid="input-evidence-file"
             />
@@ -1025,9 +1035,9 @@ export default function CaseDashboard() {
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <div className="flex items-center gap-1">
                         <BadgeCheck className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                        <span className="text-xs font-mono text-muted-foreground">{ev.sha256Hash.substring(0, 12)}...</span>
+                        <span className="text-xs font-mono text-muted-foreground">{ev.sha256Hash?.substring(0, 12) ?? "—"}...</span>
                       </div>
-                      <span className="text-xs text-muted-foreground">{formatDateTime(ev.uploadedAt)}</span>
+                      {ev.uploadedAt && <span className="text-xs text-muted-foreground">{formatDateTime(ev.uploadedAt)}</span>}
                     </div>
                     {ev.description && (
                       <p className="text-xs text-muted-foreground mt-1 truncate">{ev.description}</p>

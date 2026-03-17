@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { STATE_LAWS } from "../shared/stateLaws";
@@ -20,15 +20,20 @@ function safeError(res: Response, err: any, context: string, status = 500) {
   res.status(status).json({ error: "An internal error occurred. Please try again." });
 }
 
+const ALLOWED_MIME_TYPES = [
+  "image/jpeg", "image/png", "image/webp",
+  "image/heic", "image/heif",
+  "image/gif", "application/pdf",
+];
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf", "image/gif"];
-    if (allowed.includes(file.mimetype)) {
+    if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("File type not allowed. Upload images (JPG, PNG, WebP, HEIC, GIF) or PDF documents."));
+      cb(new Error(`File type "${file.mimetype}" is not allowed. Upload images (JPG, PNG, WebP, HEIC, GIF) or PDF documents.`));
     }
   },
 });
@@ -1246,6 +1251,20 @@ ${signatureHtml}
     } catch (err: any) {
       safeError(res, err, "Get court forms error");
     }
+  });
+
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+    if (err?.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({ error: "File too large. Maximum file size is 10MB." });
+    }
+    if (err?.code?.startsWith("LIMIT_")) {
+      return res.status(400).json({ error: `Upload error: ${err.message}` });
+    }
+    if (err?.message?.includes("not allowed") || err?.message?.includes("File type")) {
+      return res.status(415).json({ error: err.message });
+    }
+    console.error("Unhandled error:", err);
+    res.status(500).json({ error: "An unexpected error occurred." });
   });
 
   return httpServer;
