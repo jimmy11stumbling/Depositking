@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, AlertTriangle, CheckCircle2, Clock,
   Scale, DollarSign, Plus, Trash2, FileText, Sparkles, CreditCard, Loader2,
-  Printer, Eye, Upload, BadgeCheck, Download, Mail, Gavel, Info,
+  Printer, Eye, Upload, BadgeCheck, Download, Mail, Gavel, Info, TrendingUp,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-provider";
@@ -87,6 +87,43 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function computeCaseStrength(
+  isLate: boolean,
+  daysPastDeadline: number,
+  penaltyType: string,
+  penaltyMultiplier: number | null,
+  badFaithPenalty: boolean,
+  deductionsCount: number,
+): { score: number; label: "Strong" | "Moderate" | "Weak"; verdict: string; colorClass: string; bgBorderClass: string; barClass: string; badgeClass: string } {
+  let score = 0;
+  if (isLate) {
+    score += 5;
+    if (daysPastDeadline > 60) score += 2;
+    else if (daysPastDeadline > 30) score += 1;
+  }
+  if (penaltyType === "multiplier") score += (penaltyMultiplier || 1) >= 3 ? 2 : 1;
+  else if (penaltyType === "flat") score += 1;
+  if (badFaithPenalty) score += 1;
+  if (deductionsCount > 0) score += 1;
+  score = Math.min(10, score);
+  if (!isLate) score = Math.min(4, score);
+
+  const label = score >= 7 ? "Strong" : score >= 4 ? "Moderate" : "Weak";
+  const colorClass = score >= 7 ? "text-green-700 dark:text-green-400" : score >= 4 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
+  const bgBorderClass = score >= 7 ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" : score >= 4 ? "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800" : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800";
+  const barClass = score >= 7 ? "bg-green-500" : score >= 4 ? "bg-amber-500" : "bg-red-500";
+  const badgeClass = score >= 7 ? "bg-green-600 text-white hover:bg-green-600" : score >= 4 ? "bg-amber-500 text-white hover:bg-amber-500" : "bg-red-600 text-white hover:bg-red-600";
+
+  let verdict = "";
+  if (isLate && score >= 8) verdict = `Your landlord is ${daysPastDeadline} days past the statutory deadline — a clear violation that qualifies for maximum statutory penalties.`;
+  else if (isLate && score >= 6) verdict = `Your landlord has missed the ${daysPastDeadline}-day statutory return deadline, establishing a clear legal violation in your favor.`;
+  else if (isLate) verdict = `Your landlord is ${daysPastDeadline} days past the return deadline. A formal demand letter establishes your legal position.`;
+  else if (deductionsCount > 0) verdict = `The landlord is within the return window, but you have ${deductionsCount} disputed deduction${deductionsCount !== 1 ? "s" : ""} that may be challenged.`;
+  else verdict = "The landlord is still within the statutory return period. Keep records and monitor the deadline carefully.";
+
+  return { score, label, verdict, colorClass, bgBorderClass, barClass, badgeClass };
+}
+
 export default function CaseDashboard() {
   const params = useParams<{ id: string }>();
   const caseToken = params.id;
@@ -95,6 +132,7 @@ export default function CaseDashboard() {
   const [newDeduction, setNewDeduction] = useState({ description: "", amount: "", disputeReason: "" });
   const [evidenceDescription, setEvidenceDescription] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: caseData, isLoading: caseLoading } = useQuery<Case>({
@@ -272,6 +310,280 @@ export default function CaseDashboard() {
     }
   }, [caseData, caseToken, toast]);
 
+  const handleDownloadReport = async () => {
+    if (!caseData || !analysis) return;
+    setIsGeneratingReport(true);
+    try {
+      const { jsPDF } = await import("jspdf");
+      const pdf = new jsPDF("p", "mm", "letter");
+      const W = pdf.internal.pageSize.getWidth();
+      const H = pdf.internal.pageSize.getHeight();
+      const ML = 22;
+      const MR = 22;
+      const CW = W - ML - MR;
+      let y = 28;
+
+      const navy: [number, number, number] = [30, 58, 95];
+      const gold: [number, number, number] = [201, 168, 76];
+      const white: [number, number, number] = [255, 255, 255];
+
+      const dep = parseFloat(caseData.depositAmount);
+      const ret = parseFloat(caseData.amountReturned || "0");
+      const withh = dep - ret;
+      const deductionsList = deductionsData || [];
+      const st = STATE_LAWS[caseData.state];
+      const cs = computeCaseStrength(
+        analysis.isLate, analysis.daysPastDeadline,
+        st?.penaltyType || "none", st?.penaltyMultiplier || null,
+        st?.badFaithPenalty || false, deductionsList.length,
+      );
+
+      const drawPageHeader = () => {
+        pdf.setFillColor(...navy);
+        pdf.rect(0, 0, W, 16, "F");
+        pdf.setTextColor(...gold);
+        pdf.setFontSize(10);
+        pdf.setFont("helvetica", "bold");
+        pdf.text("TenantAdvocate", ML, 10);
+        pdf.setTextColor(...white);
+        pdf.setFontSize(7.5);
+        pdf.setFont("helvetica", "normal");
+        pdf.text("VIOLATION ANALYSIS REPORT — CONFIDENTIAL", W - MR, 10, { align: "right" });
+        pdf.setTextColor(0, 0, 0);
+      };
+
+      const checkPage = () => {
+        if (y > H - 32) {
+          pdf.addPage();
+          drawPageHeader();
+          y = 28;
+        }
+      };
+
+      const sectionTitle = (title: string) => {
+        checkPage();
+        y += 2;
+        pdf.setFontSize(9.5);
+        pdf.setFont("helvetica", "bold");
+        pdf.setTextColor(...navy);
+        pdf.text(title, ML, y);
+        y += 3;
+        pdf.setDrawColor(...navy);
+        pdf.setLineWidth(0.4);
+        pdf.line(ML, y, ML + 65, y);
+        y += 5;
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8.5);
+        pdf.setDrawColor(200, 200, 200);
+        pdf.setLineWidth(0.3);
+      };
+
+      const twoCol = (label: string, value: string) => {
+        checkPage();
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(80, 80, 80);
+        pdf.text(label, ML, y);
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFont("helvetica", "bold");
+        const wrapped = pdf.splitTextToSize(value, CW * 0.55);
+        pdf.text(wrapped, W - MR, y, { align: "right" });
+        pdf.setFont("helvetica", "normal");
+        y += Math.max(5, wrapped.length * 4.5);
+      };
+
+      drawPageHeader();
+
+      pdf.setFontSize(20);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(...navy);
+      pdf.text("Security Deposit Violation", ML, y);
+      y += 8;
+      pdf.text("Analysis Report", ML, y);
+      y += 7;
+      pdf.setFontSize(8.5);
+      pdf.setFont("helvetica", "normal");
+      pdf.setTextColor(130, 130, 130);
+      pdf.text(`Generated: ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`, ML, y);
+      pdf.text(`Case #${caseData.id}`, W - MR, y, { align: "right" });
+      y += 4;
+      pdf.setDrawColor(...navy);
+      pdf.setLineWidth(0.8);
+      pdf.line(ML, y, W - MR, y);
+      y += 8;
+      pdf.setTextColor(0, 0, 0);
+
+      sectionTitle("CASE PARTIES");
+      twoCol("Tenant", caseData.tenantName || "—");
+      twoCol("Tenant Address", caseData.tenantAddress || "—");
+      twoCol("Landlord", caseData.landlordName || "—");
+      twoCol("Landlord Address", caseData.landlordAddress || "—");
+      twoCol("Rental Property", caseData.propertyAddress || "—");
+      twoCol("State", st?.state || caseData.state);
+      y += 4;
+
+      sectionTitle("VIOLATION STATUS");
+      if (analysis.isLate) {
+        pdf.setFillColor(254, 226, 226);
+        pdf.roundedRect(ML, y - 2, CW, 26, 2, 2, "F");
+        pdf.setTextColor(153, 27, 27);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(9);
+        pdf.text("⚠  VIOLATION CONFIRMED — LANDLORD PAST STATUTORY DEADLINE", ML + 4, y + 5);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8.5);
+        pdf.text(`${analysis.daysPastDeadline} days past the ${st?.returnDeadlineDays}-day deadline per ${st?.citation}`, ML + 4, y + 11);
+        pdf.text(`Required return by: ${formatDate(analysis.deadlineDate)}`, ML + 4, y + 17);
+        pdf.setTextColor(0, 0, 0);
+        y += 32;
+      } else {
+        pdf.setFillColor(255, 251, 235);
+        pdf.roundedRect(ML, y - 2, CW, 14, 2, 2, "F");
+        pdf.setTextColor(120, 53, 15);
+        pdf.setFontSize(8.5);
+        const dlText = pdf.splitTextToSize(`Deadline not yet passed. Landlord has until ${formatDate(analysis.deadlineDate)} per ${st?.citation}`, CW - 8);
+        pdf.text(dlText, ML + 4, y + 5);
+        pdf.setTextColor(0, 0, 0);
+        y += 20;
+      }
+      y += 4;
+
+      sectionTitle("CASE STRENGTH ASSESSMENT");
+      const strengthRGB: Record<string, [number, number, number]> = { Strong: [22, 163, 74], Moderate: [245, 158, 11], Weak: [220, 38, 38] };
+      const sc2 = strengthRGB[cs.label];
+      pdf.setFillColor(...sc2);
+      pdf.roundedRect(ML, y - 2, 26, 14, 3, 3, "F");
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(15);
+      pdf.text(`${cs.score}`, ML + 5, y + 7);
+      pdf.setFontSize(7.5);
+      pdf.text("/10", ML + 15, y + 7);
+      pdf.setTextColor(...sc2);
+      pdf.setFontSize(11);
+      pdf.setFont("helvetica", "bold");
+      pdf.text(cs.label.toUpperCase(), ML + 32, y + 4);
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(80, 80, 80);
+      pdf.setFont("helvetica", "normal");
+      const vLines = pdf.splitTextToSize(cs.verdict, CW - 36);
+      pdf.text(vLines, ML + 32, y + 9);
+      y += Math.max(18, vLines.length * 5 + 12);
+      y += 4;
+
+      sectionTitle("FINANCIAL BREAKDOWN");
+      const finRows: [string, string][] = [
+        ["Security Deposit Paid", formatCurrency(dep)],
+        ["Amount Returned by Landlord", formatCurrency(ret)],
+        ["Amount Withheld", formatCurrency(withh)],
+      ];
+      if (analysis.penaltyBreakdown?.items) {
+        analysis.penaltyBreakdown.items.forEach((item: any) => finRows.push([item.label, formatCurrency(item.amount)]));
+      }
+      finRows.forEach(([label, value], i) => {
+        checkPage();
+        pdf.setFillColor(i % 2 === 0 ? 248 : 253, 248, 248);
+        pdf.rect(ML, y - 3.5, CW, 7.5, "F");
+        pdf.setFont("helvetica", "normal");
+        pdf.setTextColor(60, 60, 60);
+        pdf.text(label, ML + 3, y + 0.5);
+        pdf.setFont("helvetica", "bold");
+        pdf.setTextColor(0, 0, 0);
+        pdf.text(value, W - MR - 3, y + 0.5, { align: "right" });
+        y += 7.5;
+      });
+      checkPage();
+      pdf.setFillColor(...navy);
+      pdf.rect(ML, y - 3.5, CW, 10, "F");
+      pdf.setTextColor(...gold);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(9.5);
+      pdf.text("TOTAL POTENTIAL RECOVERY", ML + 3, y + 2.5);
+      pdf.text(formatCurrency(analysis.totalPotentialRecovery), W - MR - 3, y + 2.5, { align: "right" });
+      pdf.setTextColor(0, 0, 0);
+      pdf.setFontSize(8.5);
+      y += 15;
+
+      if (deductionsList.length > 0) {
+        sectionTitle(`DISPUTED DEDUCTIONS (${deductionsList.length})`);
+        deductionsList.forEach((d, i) => {
+          checkPage();
+          const hasReason = !!d.disputeReason;
+          const rowH = hasReason ? 13 : 7.5;
+          pdf.setFillColor(i % 2 === 0 ? 248 : 253, 248, 248);
+          pdf.rect(ML, y - 3, CW, rowH, "F");
+          pdf.setFont("helvetica", "bold");
+          pdf.setTextColor(0, 0, 0);
+          pdf.text(d.description, ML + 3, y + 0.5);
+          pdf.text(formatCurrency(parseFloat(d.amount)), W - MR - 3, y + 0.5, { align: "right" });
+          if (hasReason) {
+            pdf.setFont("helvetica", "italic");
+            pdf.setTextColor(100, 100, 100);
+            pdf.setFontSize(8);
+            const rLines = pdf.splitTextToSize(`Dispute: ${d.disputeReason}`, CW - 6);
+            pdf.text(rLines, ML + 3, y + 5.5);
+            pdf.setFontSize(8.5);
+            pdf.setTextColor(0, 0, 0);
+          }
+          y += rowH + 1;
+        });
+        y += 4;
+      }
+
+      sectionTitle("STATE LAW REFERENCE");
+      twoCol("Statute", st?.citation || "—");
+      twoCol("Return Deadline", `${st?.returnDeadlineDays} calendar days from move-out`);
+      twoCol("Penalty", st?.penaltyType === "multiplier" ? `${st.penaltyMultiplier}× withheld amount` : st?.penaltyType === "flat" ? `$${st.penaltyFlatFee} flat fee` : "No statutory penalty");
+      twoCol("Bad Faith Penalty", st?.badFaithPenalty ? "Available in this state" : "Not available");
+      twoCol("Itemized Notice Required", st?.itemizedNoticeRequired ? "Yes" : "No");
+      if (st?.smallClaimsCourtName) {
+        twoCol("Small Claims Court", st.smallClaimsCourtName);
+        twoCol("Small Claims Limit", `$${st.smallClaimsLimit?.toLocaleString()}`);
+        twoCol("Est. Filing Fee", `~$${st.smallClaimsFilingFee}`);
+      }
+      if (st?.specialPenaltyRules) {
+        y += 2;
+        pdf.setFont("helvetica", "italic");
+        pdf.setTextColor(60, 60, 60);
+        const spLines = pdf.splitTextToSize(`Note: ${st.specialPenaltyRules}`, CW);
+        pdf.text(spLines, ML, y);
+        y += spLines.length * 4.8;
+        pdf.setTextColor(0, 0, 0);
+      }
+      y += 6;
+
+      checkPage();
+      pdf.setDrawColor(210, 210, 210);
+      pdf.setLineWidth(0.3);
+      pdf.line(ML, y, W - MR, y);
+      y += 5;
+      pdf.setFontSize(7);
+      pdf.setFont("helvetica", "normal");
+      pdf.setTextColor(150, 150, 150);
+      const disc = "DISCLAIMER: This report was generated by TenantAdvocate, an AI-powered legal technology platform. TenantAdvocate is not a law firm and does not provide legal advice. This analysis is based on publicly available statutes and the facts you provided. Penalty calculations are estimates; actual recovery may vary. Consult a licensed attorney for complex legal matters.";
+      const discLines = pdf.splitTextToSize(disc, CW);
+      pdf.text(discLines, ML, y);
+
+      const pageCount = pdf.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(7.5);
+        pdf.setFont("helvetica", "normal");
+        pdf.setTextColor(170, 170, 170);
+        pdf.text(`TenantAdvocate.com  ·  Case #${caseData.id}  ·  Page ${i} of ${pageCount}`, W / 2, H - 8, { align: "center" });
+      }
+
+      pdf.save(`violation-report-case-${caseData.id}.pdf`);
+      toast({ title: "Report Downloaded", description: "Your free violation analysis report has been saved as a PDF." });
+    } catch (err) {
+      console.error("Report generation error:", err);
+      toast({ title: "Error", description: "Could not generate the report. Please try again.", variant: "destructive" });
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
   const handleFileDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
@@ -351,6 +663,14 @@ export default function CaseDashboard() {
   const deliveries = deliveriesData || [];
   const courtForms = courtFormsData || [];
   const breakdown = analysis.penaltyBreakdown;
+  const caseStrength = computeCaseStrength(
+    analysis.isLate,
+    analysis.daysPastDeadline,
+    stateLaw?.penaltyType || "none",
+    stateLaw?.penaltyMultiplier || null,
+    stateLaw?.badFaithPenalty || false,
+    deductions.length,
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -478,6 +798,61 @@ export default function CaseDashboard() {
             )}
           </Card>
         </div>
+
+        <Card className={`p-5 sm:p-6 border-2 ${caseStrength.bgBorderClass}`} data-testid="card-case-strength">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp className={`h-5 w-5 ${caseStrength.colorClass}`} />
+              <h3 className="font-serif text-lg font-bold text-foreground">Case Strength Assessment</h3>
+            </div>
+            <Badge variant="secondary" className="text-xs">Free Analysis</Badge>
+          </div>
+
+          <div className="flex items-start gap-5 sm:gap-8">
+            <div className="flex-shrink-0 flex flex-col items-center">
+              <div className={`w-20 h-20 rounded-full border-4 flex flex-col items-center justify-center ${
+                caseStrength.score >= 7 ? "border-green-500 bg-green-50 dark:bg-green-950/40" :
+                caseStrength.score >= 4 ? "border-amber-500 bg-amber-50 dark:bg-amber-950/40" :
+                "border-red-500 bg-red-50 dark:bg-red-950/40"
+              }`}>
+                <span className={`font-serif text-3xl font-bold leading-none ${caseStrength.colorClass}`} data-testid="text-strength-score">{caseStrength.score}</span>
+                <span className="text-xs text-muted-foreground">/10</span>
+              </div>
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge className={caseStrength.badgeClass} data-testid="badge-strength-label">
+                  {caseStrength.label.toUpperCase()} CASE
+                </Badge>
+              </div>
+              <p className="text-sm text-foreground leading-relaxed" data-testid="text-strength-verdict">{caseStrength.verdict}</p>
+              <div className="mt-3 h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${caseStrength.barClass}`}
+                  style={{ width: `${(caseStrength.score / 10) * 100}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {caseStrength.score}/10 — based on statutory deadline, penalty provisions, and documented disputes
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-5 pt-4 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadReport}
+              disabled={isGeneratingReport}
+              data-testid="button-download-report"
+            >
+              {isGeneratingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+              {isGeneratingReport ? "Generating PDF..." : "Download Free Violation Report"}
+            </Button>
+            <p className="text-xs text-muted-foreground">Full case analysis, penalty breakdown, and state law reference — no cost, no sign-up required</p>
+          </div>
+        </Card>
 
         <Card className="p-5 sm:p-6">
           <div className="flex items-center justify-between gap-2 mb-4">

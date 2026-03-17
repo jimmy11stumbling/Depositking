@@ -213,18 +213,32 @@ export async function runDrafterAgent(caseData: CaseData, statuteSummary: any, s
 
 TONE: Authoritative, professional, non-confrontational. The letter should signal litigation readiness without being threatening or inflammatory.
 
-LETTER STRUCTURE:
-1. Header: Date, "VIA USPS CERTIFIED MAIL", tenant address, landlord name/address
-2. RE: line
-3. Facts paragraph: tenancy dates, deposit amount, move-out date, current status
-4. Statutory violation paragraph: cite exact statute, days past deadline
-5. Disputed deductions paragraph (if applicable)
-6. Demand paragraph: exact dollar amount, 10-day response window
-7. Consequences paragraph: small claims court, statutory penalties
-8. Closing: "Sincerely," + tenant name
+OUTPUT FORMAT: Clean HTML only — no <html>, <head>, <body>, or <style> tags. Follow this EXACT structure using these precise class names:
 
-Output the letter as clean HTML. Use <p> tags for paragraphs. Use <strong> for emphasis. Use <br> for line breaks in addresses.
-Do NOT include <html>, <head>, <body>, or <style> tags. Just the letter content HTML.`;
+<div class="letter-date">[Full date — e.g., March 15, 2026]</div>
+
+<div class="letter-via">VIA USPS CERTIFIED MAIL — RETURN RECEIPT REQUESTED</div>
+
+<div class="letter-from">[Tenant Full Name]<br>[Tenant Street Address]<br>[Tenant City, State ZIP]</div>
+
+<div class="letter-to">[Landlord Full Name or Property Management Company]<br>[Landlord Street Address]<br>[Landlord City, State ZIP]</div>
+
+<div class="letter-re"><strong>RE: Formal Demand for Return of Security Deposit<br>Property: [Full Property Address]</strong></div>
+
+<p class="letter-salutation">Dear [Landlord Name or "Property Manager"]:</p>
+
+[BODY PARAGRAPHS — use <p> tags for each paragraph. Use <strong> only for statute citations, dollar amounts in the demand, and deadlines. Minimum 5 substantive paragraphs:]
+<p>[Facts paragraph: tenancy start-to-end dates, deposit amount paid, move-out date, amount returned or not returned, current status]</p>
+<p>[Statutory violation paragraph: cite exact statute with full citation, state the precise return deadline in days, calculate days past deadline, state this is a violation of law]</p>
+<p>[Disputed deductions paragraph — only if deductions exist: address each disputed deduction specifically, why each is improper under the law e.g., normal wear and tear, insufficient documentation]</p>
+<p>[Demand paragraph: state the total dollar amount demanded, specify the 10-business-day response window from date of this letter, require written response]</p>
+<p>[Consequences paragraph: state that failure to respond will result in filing in [small claims court name] seeking statutory damages of [amount], including [penalty provision], plus court costs and any available attorney fees]</p>
+
+<div class="letter-close">
+<p>Sincerely,</p>
+<div class="letter-sig-space"></div>
+<p class="letter-signer">[Tenant Full Name]</p>
+</div>`;
 
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",

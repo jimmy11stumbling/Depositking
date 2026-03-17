@@ -423,21 +423,36 @@ export default function LetterPreviewPage() {
           </div>
         )}
 
-        <Card className={`p-6 sm:p-8 bg-white dark:bg-white text-gray-900 print:shadow-none print:border-none ${isEditing ? "ring-2 ring-amber-400 dark:ring-amber-600" : ""}`}>
+        <Card className={`p-6 sm:p-10 bg-white dark:bg-white text-gray-900 print:shadow-none print:border-none ${isEditing ? "ring-2 ring-amber-400 dark:ring-amber-600" : ""}`}>
+          <style>{`
+            .legal-letter .letter-date { font-size: 0.92rem; margin-bottom: 18px; color: #1a1a1a; }
+            .legal-letter .letter-via { font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: #444; border-left: 3px solid #1E3A5F; padding: 4px 10px; margin-bottom: 22px; font-weight: 600; background: #f5f6f8; }
+            .legal-letter .letter-from { font-size: 0.88rem; line-height: 1.65; margin-bottom: 18px; color: #1a1a1a; }
+            .legal-letter .letter-to { font-size: 0.88rem; line-height: 1.65; margin-bottom: 22px; color: #1a1a1a; }
+            .legal-letter .letter-re { padding: 10px 14px; background: #f0f3f8; border-left: 4px solid #1E3A5F; margin-bottom: 22px; font-size: 0.92rem; color: #1a1a1a; line-height: 1.55; }
+            .legal-letter .letter-salutation { margin-bottom: 18px; font-size: 0.92rem; color: #1a1a1a; }
+            .legal-letter p { margin-bottom: 16px; font-size: 0.91rem; line-height: 1.78; text-align: justify; color: #1a1a1a; }
+            .legal-letter p.letter-salutation { text-align: left; }
+            .legal-letter strong { font-weight: 700; color: #111; }
+            .legal-letter .letter-close { margin-top: 32px; font-size: 0.91rem; line-height: 1.9; color: #1a1a1a; }
+            .legal-letter .letter-close p { margin-bottom: 0; text-align: left; }
+            .legal-letter .letter-sig-space { height: 48px; }
+            .legal-letter .letter-signer { font-weight: 700; font-size: 0.94rem; color: #111; margin-top: 4px; }
+          `}</style>
           <div ref={letterContentRef}>
             {isEditing ? (
               <div
                 ref={editorRef}
                 contentEditable
                 suppressContentEditableWarning
-                className="prose prose-sm max-w-none font-serif leading-relaxed outline-none min-h-[400px] focus:outline-none"
+                className="legal-letter prose prose-sm max-w-none font-serif leading-relaxed outline-none min-h-[400px] focus:outline-none"
                 style={{ color: "#1a1a1a" }}
                 dangerouslySetInnerHTML={{ __html: editedHtml }}
                 data-testid="editor-letter-content"
               />
             ) : (
               <div
-                className="prose prose-sm max-w-none font-serif leading-relaxed"
+                className="legal-letter prose prose-sm max-w-none font-serif leading-relaxed"
                 style={{ color: "#1a1a1a" }}
                 dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
                 data-testid="text-letter-content"
