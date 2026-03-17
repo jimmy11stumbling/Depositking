@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Case, Letter, Signature } from "@shared/schema";
+import type { Case, Letter, Signature, Delivery } from "@shared/schema";
 import DOMPurify from "dompurify";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -19,6 +19,9 @@ import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-provider";
 import { Logo } from "@/components/logo";
 import { usePageTitle } from "@/hooks/use-page-title";
+
+// ⚠️ TEST MODE — set to false before going live
+const TEST_MODE = true;
 
 export default function LetterPreviewPage() {
   const params = useParams<{ id: string }>();
@@ -111,9 +114,43 @@ export default function LetterPreviewPage() {
     onSuccess: () => {
       toast({ title: "Letter Signed", description: "Your demand letter has been signed and finalized." });
       queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken, "deliveries"] });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const { data: deliveries = [] } = useQuery<Delivery[]>({
+    queryKey: ["/api/cases", caseToken, "deliveries"],
+    enabled: isSigned,
+  });
+
+  const mailCheckout = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/cases/${caseToken}/create-mail-checkout`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.url) window.location.href = data.url;
+    },
+    onError: (err: Error) => {
+      toast({ title: "Checkout Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const sendLetter = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/cases/${caseToken}/send-letter`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Letter Sent!", description: "Your demand letter is on its way via USPS Certified Mail." });
+      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken, "deliveries"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Send Failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -492,20 +529,110 @@ export default function LetterPreviewPage() {
         </Card>
 
         {isSigned && (
-          <Card className="p-5 sm:p-6 print:hidden">
-            <div className="flex items-center gap-2 mb-4">
+          <Card className="p-5 sm:p-6 print:hidden border-[#2E5FAA]/30 bg-[#2E5FAA]/5 dark:bg-[#2E5FAA]/10">
+            <div className="flex items-center gap-2 mb-1">
               <Mail className="h-5 w-5 text-[#2E5FAA]" />
-              <h3 className="font-serif text-lg font-bold text-foreground">Next Steps</h3>
+              <h3 className="font-serif text-lg font-bold text-foreground">Send via USPS Certified Mail</h3>
             </div>
-            <div className="space-y-3">
+            <p className="text-sm text-muted-foreground mb-4">
+              We print, mail, and track your letter — giving you legal proof your landlord received it.
+            </p>
+
+            {deliveries.length > 0 ? (
+              <div className="space-y-3">
+                {deliveries.map((del) => (
+                  <div key={del.id} className="p-4 rounded-md bg-card border space-y-2" data-testid={`delivery-item-${del.id}`}>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          className={del.status === "delivered" ? "bg-green-600 text-white" : "bg-[#2E5FAA] text-white"}
+                          data-testid={`delivery-status-${del.id}`}
+                        >
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          {del.status.charAt(0).toUpperCase() + del.status.slice(1)}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">USPS Certified Mail</span>
+                      </div>
+                    </div>
+                    {del.trackingNumber && (
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Tracking: </span>
+                        <span className="font-mono font-medium text-foreground" data-testid={`delivery-tracking-${del.id}`}>{del.trackingNumber}</span>
+                      </div>
+                    )}
+                    {del.certifiedMailNumber && (
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Certified Mail #: </span>
+                        <span className="font-mono font-medium text-foreground">{del.certifiedMailNumber}</span>
+                      </div>
+                    )}
+                    {del.expectedDeliveryDate && (
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Expected Delivery: </span>
+                        <span className="font-medium text-foreground" data-testid={`delivery-expected-${del.id}`}>{del.expectedDeliveryDate}</span>
+                      </div>
+                    )}
+                    {del.recipientName && (
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">To: </span>
+                        <span className="text-foreground">{del.recipientName}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-3 text-center text-sm">
+                  {[
+                    { icon: "📬", label: "We print & mail it" },
+                    { icon: "📦", label: "USPS tracking included" },
+                    { icon: "✅", label: "Legal proof of delivery" },
+                  ].map((f) => (
+                    <div key={f.label} className="p-3 rounded-md bg-card border flex flex-col items-center gap-1">
+                      <span className="text-lg">{f.icon}</span>
+                      <span className="text-xs text-muted-foreground leading-tight">{f.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <p className="text-xs text-muted-foreground">Includes postage, printing, and certified mail tracking.</p>
+                  {/* ⚠️ TEST MODE — restore conditional below before going live:
+                    !caseData?.mailPaid ? mailCheckout button : sendLetter button */}
+                  <Button
+                    onClick={() => sendLetter.mutate()}
+                    disabled={sendLetter.isPending}
+                    size="lg"
+                    className="bg-[#2E5FAA] text-white whitespace-nowrap px-8"
+                    data-testid="button-send-certified-mail"
+                  >
+                    {sendLetter.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="mr-2 h-4 w-4" />
+                    )}
+                    {sendLetter.isPending ? "Sending..." : TEST_MODE ? "Send Now (Test Mode)" : "Pay $12 — Send via Certified Mail"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {isSigned && (
+          <Card className="p-5 sm:p-6 print:hidden">
+            <div className="flex items-center gap-2 mb-3">
+              <Scale className="h-5 w-5 text-[#2E5FAA]" />
+              <h3 className="font-serif text-base font-bold text-foreground">What Happens Next</h3>
+            </div>
+            <div className="space-y-2">
               {[
-                { step: "1", title: "Print Your Letter", desc: "Print the letter on standard white paper using the Print button above." },
-                { step: "2", title: "Send via Certified Mail", desc: "Send the letter via USPS Certified Mail with Return Receipt Requested. This creates a legal record proving your landlord received the letter." },
-                { step: "3", title: "Keep Copies", desc: "Keep a copy of the letter, the certified mail receipt, and the return receipt card for your records." },
-                { step: "4", title: "Wait 10 Business Days", desc: "Allow your landlord 10 business days to respond. If they don't, you can file in Small Claims Court." },
+                { step: "1", title: "Wait 10–14 Business Days", desc: "Your landlord has this window to return your deposit or respond in writing." },
+                { step: "2", title: "Document Everything", desc: "Save all correspondence. No response strengthens your case." },
+                { step: "3", title: "File Small Claims if Needed", desc: "Return to your dashboard to generate pre-filled small claims court forms for your state." },
               ].map((item) => (
                 <div key={item.step} className="flex gap-3 p-3 rounded-md bg-card border">
-                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-[#2E5FAA]/10 flex items-center justify-center">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#2E5FAA]/10 flex items-center justify-center">
                     <span className="text-[#2E5FAA] font-bold text-xs">{item.step}</span>
                   </div>
                   <div>
@@ -515,6 +642,16 @@ export default function LetterPreviewPage() {
                 </div>
               ))}
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4 w-full"
+              onClick={() => navigate(`/cases/${caseToken}`)}
+              data-testid="button-back-to-dashboard"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Dashboard
+            </Button>
           </Card>
         )}
 

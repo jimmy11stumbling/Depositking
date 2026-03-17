@@ -1167,35 +1167,20 @@ export default function CaseDashboard() {
                       </Badge>
                     )}
                   </div>
-                  {!caseData.mailPaid ? (
-                    <Button
-                      onClick={() => mailCheckout.mutate()}
-                      disabled={mailCheckout.isPending}
-                      className="bg-[#C9A84C] text-white border-[#b8963f] whitespace-nowrap"
-                      data-testid="button-pay-certified-mail"
-                    >
-                      {mailCheckout.isPending ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <CreditCard className="mr-2 h-4 w-4" />
-                      )}
-                      {mailCheckout.isPending ? "Processing..." : "Pay $12 — Send via Certified Mail"}
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={() => sendLetter.mutate()}
-                      disabled={sendLetter.isPending}
-                      className="bg-[#2E5FAA] text-white whitespace-nowrap"
-                      data-testid="button-send-certified-mail"
-                    >
-                      {sendLetter.isPending ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Mail className="mr-2 h-4 w-4" />
-                      )}
-                      {sendLetter.isPending ? "Sending..." : "Send Now"}
-                    </Button>
-                  )}
+                  {/* ⚠️ TEST MODE — restore mailPaid check before going live */}
+                  <Button
+                    onClick={() => sendLetter.mutate()}
+                    disabled={sendLetter.isPending}
+                    className="bg-[#2E5FAA] text-white whitespace-nowrap"
+                    data-testid="button-send-certified-mail"
+                  >
+                    {sendLetter.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Mail className="mr-2 h-4 w-4" />
+                    )}
+                    {sendLetter.isPending ? "Sending..." : "Send Now (Test Mode)"}
+                  </Button>
                 </div>
               </div>
             ) : (
