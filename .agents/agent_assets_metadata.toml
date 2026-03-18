@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "3uduyVQiJZdbVCTbkQ-hG"
+uri = "file://TenantAdvocate_PRD.md"
+type = "text"
+title = "TenantAdvocate — Product Requirements Document"
