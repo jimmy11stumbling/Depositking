@@ -1416,7 +1416,7 @@ export default function CaseDashboard() {
                           </div>
                           <div>
                             <span className="text-xs text-muted-foreground block">Total Claim</span>
-                            <span className="font-semibold text-[#C9A84C]">{fd.totalClaimAmount != null ? formatCurrency(fd.totalClaimAmount) : "—"}</span>
+                            <span className="font-semibold text-[#C9A84C]">{(fd.totalClaimAmount ?? fd.claimAmount) != null ? formatCurrency(fd.totalClaimAmount ?? fd.claimAmount) : "—"}</span>
                           </div>
                         </div>
 
@@ -1441,7 +1441,7 @@ export default function CaseDashboard() {
 
                         <div className="p-3 rounded-md bg-[#2E5FAA]/5 border border-[#2E5FAA]/15">
                           <span className="text-[10px] font-bold text-[#2E5FAA] uppercase tracking-wider block mb-2">Legal Basis</span>
-                          <p className="text-sm text-foreground">{fd.legalBasis || "—"}</p>
+                          <p className="text-sm text-foreground">{fd.legalBasis || fd.statutoryBasis || "—"}</p>
                         </div>
 
                         {fd.violationSummary && (
