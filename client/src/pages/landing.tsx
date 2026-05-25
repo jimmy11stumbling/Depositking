@@ -902,6 +902,8 @@ export default function LandingPage() {
                 support@tenantadvocate.com
               </a>
               <span className="w-1 h-1 rounded-full bg-muted-foreground/30 hidden sm:block" />
+              <Link href="/about" className="hover:text-foreground transition-colors">About</Link>
+              <span className="w-1 h-1 rounded-full bg-muted-foreground/30 hidden sm:block" />
               <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
               <span className="w-1 h-1 rounded-full bg-muted-foreground/30 hidden sm:block" />
               <Link href="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>

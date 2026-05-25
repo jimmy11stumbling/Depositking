@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { STATE_LAWS } from "../shared/stateLaws";
 import { insertCaseSchema, insertDeductionSchema } from "@shared/schema";
-import { runParalegalAgent, runAttorneyAgent, runDrafterAgent, runReviewerAgent, withTimeout } from "./agents";
+import { runParalegalAgent, runAttorneyAgent, runDrafterAgent, runReviewerAgent, withTimeout, withRetry } from "./agents";
 import sanitizeHtml from "sanitize-html";
 import { z } from "zod";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
@@ -18,6 +18,15 @@ const TEST_MODE = true;
 function safeError(res: Response, err: any, context: string, status = 500) {
   console.error(`${context}:`, err);
   res.status(status).json({ error: "An internal error occurred. Please try again." });
+}
+
+function trackEvent(eventType: string, opts: { pagePath?: string; caseId?: number; metadata?: any } = {}) {
+  storage.createAnalyticsEvent({
+    eventType,
+    pagePath: opts.pagePath || null,
+    caseId: opts.caseId || null,
+    metadata: opts.metadata || null,
+  }).catch(() => {});
 }
 
 const ALLOWED_MIME_TYPES = [
@@ -293,7 +302,16 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid move-out date" });
       }
 
-      const newCase = await storage.createCase(data);
+      const enrichedData = { ...data };
+      if (data.landlordStreet && data.landlordCity && data.landlordState && data.landlordZip) {
+        enrichedData.landlordAddress = `${data.landlordStreet}, ${data.landlordCity}, ${data.landlordState} ${data.landlordZip}`;
+      }
+      if (data.tenantStreet && data.tenantCity && data.tenantState && data.tenantZip) {
+        enrichedData.tenantAddress = `${data.tenantStreet}, ${data.tenantCity}, ${data.tenantState} ${data.tenantZip}`;
+      }
+
+      const newCase = await storage.createCase(enrichedData);
+      trackEvent("case_created", { caseId: newCase.id });
 
       const analysis = calculateAnalysis(
         newCase.state,
@@ -494,7 +512,10 @@ export async function registerRoutes(
       send({ agent: "paralegal", status: "running", message: `Researching statutes for ${law.state}...` });
       let statuteSummary: any;
       try {
-        statuteSummary = await withTimeout(runParalegalAgent(agentCaseData), 60000, "Paralegal agent");
+        statuteSummary = await withRetry(
+          () => withTimeout(runParalegalAgent(agentCaseData), 60000, "Paralegal agent"),
+          { maxRetries: 3, baseDelayMs: 800, label: "Paralegal agent" }
+        );
         send({
           agent: "paralegal",
           status: "complete",
@@ -502,7 +523,7 @@ export async function registerRoutes(
           confidence: 95,
         });
       } catch (err: any) {
-        console.error("Paralegal agent error:", err);
+        console.error("Paralegal agent error (retries exhausted):", err);
         statuteSummary = {
           state: law.state,
           citation: law.citation,
@@ -522,7 +543,10 @@ export async function registerRoutes(
       send({ agent: "attorney", status: "running", message: "Assessing case strength..." });
       let strategyBrief: any;
       try {
-        strategyBrief = await withTimeout(runAttorneyAgent(agentCaseData, statuteSummary), 60000, "Attorney agent");
+        strategyBrief = await withRetry(
+          () => withTimeout(runAttorneyAgent(agentCaseData, statuteSummary), 60000, "Attorney agent"),
+          { maxRetries: 3, baseDelayMs: 800, label: "Attorney agent" }
+        );
         send({
           agent: "attorney",
           status: "complete",
@@ -530,7 +554,7 @@ export async function registerRoutes(
           confidence: 92,
         });
       } catch (err: any) {
-        console.error("Attorney agent error:", err);
+        console.error("Attorney agent error (retries exhausted):", err);
         const penaltyAmt = law.penaltyType === "multiplier" && law.penaltyMultiplier
           ? withheldAmount * law.penaltyMultiplier
           : law.penaltyType === "flat" && law.penaltyFlatFee
@@ -555,10 +579,13 @@ export async function registerRoutes(
       send({ agent: "drafter", status: "running", message: "Drafting authoritative letter..." });
       let draftHtml: string;
       try {
-        draftHtml = await withTimeout(runDrafterAgent(agentCaseData, statuteSummary, strategyBrief), 90000, "Drafter agent");
+        draftHtml = await withRetry(
+          () => withTimeout(runDrafterAgent(agentCaseData, statuteSummary, strategyBrief), 90000, "Drafter agent"),
+          { maxRetries: 3, baseDelayMs: 800, label: "Drafter agent" }
+        );
         send({ agent: "drafter", status: "complete", message: "Draft complete", confidence: 90 });
       } catch (err: any) {
-        console.error("Drafter agent error:", err);
+        console.error("Drafter agent error (retries exhausted):", err);
         draftHtml = generateFallbackLetter(agentCaseData, strategyBrief);
         send({ agent: "drafter", status: "complete", message: "Draft complete (template)", confidence: 80 });
       }
@@ -566,7 +593,10 @@ export async function registerRoutes(
       send({ agent: "reviewer", status: "running", message: "Reviewing for accuracy..." });
       let reviewResult: any;
       try {
-        reviewResult = await withTimeout(runReviewerAgent(draftHtml, statuteSummary, strategyBrief), 60000, "Reviewer agent");
+        reviewResult = await withRetry(
+          () => withTimeout(runReviewerAgent(draftHtml, statuteSummary, strategyBrief), 60000, "Reviewer agent"),
+          { maxRetries: 3, baseDelayMs: 800, label: "Reviewer agent" }
+        );
         send({
           agent: "reviewer",
           status: "complete",
@@ -574,7 +604,7 @@ export async function registerRoutes(
           confidence: reviewResult.confidenceScore,
         });
       } catch (err: any) {
-        console.error("Reviewer agent error:", err);
+        console.error("Reviewer agent error (retries exhausted):", err);
         reviewResult = {
           approved: true,
           confidenceScore: 80,
@@ -597,6 +627,7 @@ export async function registerRoutes(
         status: "generated",
         potentialRecovery: (strategyBrief.total_claim || analysis.totalPotentialRecovery).toString(),
       });
+      trackEvent("letter_generated", { caseId });
 
       send({ status: "done" });
       res.end();
@@ -687,6 +718,7 @@ export async function registerRoutes(
 
       await storage.createSignature({ caseId, signatureBase64: parsed.data.signatureBase64 });
       await storage.updateCase(caseId, { status: "signed" });
+      trackEvent("letter_signed", { caseId });
 
       res.json({ success: true });
     } catch (err: any) {
@@ -790,6 +822,7 @@ export async function registerRoutes(
 
       if (session.payment_status === "paid") {
         await storage.updateCase(caseId, { paid: true, stripeSessionId: sessionId });
+        trackEvent("payment_completed", { caseId, metadata: { type: "demand_letter", amount: 2900 } });
         return res.json({ paid: true });
       }
 
@@ -862,6 +895,7 @@ export async function registerRoutes(
 
       if (session.payment_status === "paid") {
         await storage.updateCase(caseData.id, { mailPaid: true, mailStripeSessionId: mailSessionId });
+        trackEvent("mail_payment_completed", { caseId: caseData.id, metadata: { type: "certified_mail", amount: 1200 } });
         return res.json({ paid: true });
       }
 
@@ -1002,7 +1036,18 @@ export async function registerRoutes(
     }
   });
 
-  function parseUSAddress(raw: string): { line1: string; line2: string; city: string; state: string; zip: string } {
+  function parseUSAddress(raw: string, structured?: { street?: string | null; city?: string | null; state?: string | null; zip?: string | null }): { line1: string; line2: string; city: string; state: string; zip: string } {
+    if (structured?.street && structured.city && structured.state && structured.zip) {
+      const street = structured.street.trim();
+      const aptMatch = street.match(/^(.*?)\s+(Apt|Unit|Suite|#|Ste|Fl)\s+(.+)$/i);
+      return {
+        line1: aptMatch ? aptMatch[1].trim() : street,
+        line2: aptMatch ? `${aptMatch[2]} ${aptMatch[3]}` : "",
+        city: structured.city.trim(),
+        state: structured.state.trim().toUpperCase(),
+        zip: structured.zip.trim(),
+      };
+    }
     const addr = (raw || "").replace(/\r?\n/g, ", ").replace(/\s*,\s*/g, ", ").replace(/\s{2,}/g, " ").trim();
     const zipMatch = addr.match(/(\d{5}(?:-\d{4})?)\s*$/);
     const zip = zipMatch?.[1] ?? "";
@@ -1047,8 +1092,18 @@ export async function registerRoutes(
 
       const signature = await storage.getSignatureByCase(caseData.id);
 
-      const toAddr = parseUSAddress(caseData.landlordAddress || "");
-      const fromAddr = parseUSAddress(caseData.tenantAddress || "");
+      const toAddr = parseUSAddress(caseData.landlordAddress || "", {
+        street: caseData.landlordStreet,
+        city: caseData.landlordCity,
+        state: caseData.landlordState,
+        zip: caseData.landlordZip,
+      });
+      const fromAddr = parseUSAddress(caseData.tenantAddress || "", {
+        street: caseData.tenantStreet,
+        city: caseData.tenantCity,
+        state: caseData.tenantState,
+        zip: caseData.tenantZip,
+      });
 
       const addrErrors: string[] = [];
       if (!toAddr.line1) addrErrors.push("Landlord street address is missing");
@@ -1158,6 +1213,7 @@ ${signatureHtml}
         letterSentAt: new Date(),
         letterSentMethod: "usps_certified",
       });
+      trackEvent("letter_sent", { caseId: caseData.id, metadata: { method: "usps_certified", deliveryId: delivery.id } });
 
       res.status(201).json(delivery);
     } catch (err: any) {
@@ -1173,6 +1229,63 @@ ${signatureHtml}
       res.json(items);
     } catch (err: any) {
       safeError(res, err, "Get deliveries error");
+    }
+  });
+
+  app.get("/api/deliveries/:deliveryId/track", async (req, res) => {
+    try {
+      const deliveryId = parseInt(req.params.deliveryId);
+      if (isNaN(deliveryId)) return res.status(400).json({ error: "Invalid delivery ID" });
+
+      const delivery = await storage.getDelivery(deliveryId);
+      if (!delivery) return res.status(404).json({ error: "Delivery not found" });
+
+      if (!delivery.externalId) {
+        return res.status(400).json({ error: "No external tracking ID" });
+      }
+
+      const lobApiKey = process.env.LOB_API_KEY;
+      if (!lobApiKey) {
+        return res.status(503).json({ error: "Tracking service not configured" });
+      }
+
+      const lobResponse = await fetch(`https://api.lob.com/v1/letters/${delivery.externalId}`, {
+        headers: {
+          "Authorization": `Basic ${Buffer.from(lobApiKey + ":").toString("base64")}`,
+        },
+      });
+
+      if (!lobResponse.ok) {
+        const errData = await lobResponse.json().catch(() => ({ error: { message: "Unknown Lob error" } }));
+        return res.status(502).json({ error: `Tracking error: ${errData?.error?.message || "Unknown error"}` });
+      }
+
+      const lobData = await lobResponse.json();
+      const currentStatus = (lobData.status || delivery.status).toLowerCase();
+      const isDelivered = currentStatus === "delivered";
+
+      const history = Array.isArray(delivery.statusHistory) ? delivery.statusHistory : [];
+      const lastEntry = history[history.length - 1];
+      if (!lastEntry || lastEntry.status !== currentStatus) {
+        history.push({
+          status: currentStatus,
+          timestamp: new Date().toISOString(),
+          detail: `Lob status: ${lobData.status || currentStatus}`,
+        });
+      }
+
+      const updated = await storage.updateDelivery(deliveryId, {
+        status: currentStatus,
+        trackingNumber: lobData.tracking_number || delivery.trackingNumber,
+        certifiedMailNumber: lobData.tracking_number || delivery.certifiedMailNumber,
+        expectedDeliveryDate: lobData.expected_delivery_date || delivery.expectedDeliveryDate,
+        deliveredAt: isDelivered && !delivery.deliveredAt ? new Date() : delivery.deliveredAt,
+        statusHistory: history,
+      });
+
+      res.json(updated);
+    } catch (err: any) {
+      safeError(res, err, "Track delivery error");
     }
   });
 

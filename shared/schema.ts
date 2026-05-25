@@ -12,8 +12,16 @@ export const cases = pgTable("cases", {
   amountReturned: decimal("amount_returned", { precision: 10, scale: 2 }).default("0"),
   landlordName: varchar("landlord_name", { length: 255 }),
   landlordAddress: text("landlord_address"),
+  landlordStreet: text("landlord_street"),
+  landlordCity: text("landlord_city"),
+  landlordState: varchar("landlord_state", { length: 2 }),
+  landlordZip: varchar("landlord_zip", { length: 10 }),
   tenantName: varchar("tenant_name", { length: 255 }),
   tenantAddress: text("tenant_address"),
+  tenantStreet: text("tenant_street"),
+  tenantCity: text("tenant_city"),
+  tenantState: varchar("tenant_state", { length: 2 }),
+  tenantZip: varchar("tenant_zip", { length: 10 }),
   propertyAddress: text("property_address"),
   tenancyStart: text("tenancy_start"),
   status: varchar("status", { length: 50 }).default("intake").notNull(),
@@ -86,6 +94,15 @@ export const deliveries = pgTable("deliveries", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+export const analyticsEvents = pgTable("analytics_events", {
+  id: serial("id").primaryKey(),
+  eventType: varchar("event_type", { length: 100 }).notNull(),
+  pagePath: text("page_path"),
+  caseId: integer("case_id").references(() => cases.id, { onDelete: "set null" }),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const courtForms = pgTable("court_forms", {
   id: serial("id").primaryKey(),
   caseId: integer("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }),
@@ -141,6 +158,11 @@ export const insertCourtFormSchema = createInsertSchema(courtForms).omit({
   generatedAt: true,
 });
 
+export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type Case = typeof cases.$inferSelect;
 export type InsertCase = z.infer<typeof insertCaseSchema>;
 export type Deduction = typeof deductions.$inferSelect;
@@ -155,6 +177,8 @@ export type Delivery = typeof deliveries.$inferSelect;
 export type InsertDelivery = z.infer<typeof insertDeliverySchema>;
 export type CourtForm = typeof courtForms.$inferSelect;
 export type InsertCourtForm = z.infer<typeof insertCourtFormSchema>;
+export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
 
 export interface StateLaw {
   state: string;

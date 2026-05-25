@@ -170,6 +170,28 @@ export default function CaseDashboard() {
     enabled: isCaseFinalized,
   });
 
+  const trackDelivery = useMutation({
+    mutationFn: async (deliveryId: number) => {
+      const res = await apiRequest("GET", `/api/deliveries/${deliveryId}/track`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cases", caseToken, "deliveries"] });
+    },
+  });
+
+  useEffect(() => {
+    if (!deliveriesData?.length) return;
+    const incomplete = deliveriesData.filter(
+      (d) => d.status !== "delivered" && d.status !== "returned_to_sender" && d.status !== "canceled"
+    );
+    if (incomplete.length === 0) return;
+    const interval = setInterval(() => {
+      incomplete.forEach((d) => trackDelivery.mutate(d.id));
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [deliveriesData, caseToken, trackDelivery]);
+
   const addDeduction = useMutation({
     mutationFn: async (data: { description: string; amount: string; disputeReason: string }) => {
       const res = await apiRequest("POST", `/api/cases/${caseToken}/deductions`, {
@@ -1200,48 +1222,88 @@ export default function CaseDashboard() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-3">
-                {deliveries.map((del) => (
-                  <div key={del.id} className="p-4 rounded-md bg-card border space-y-2" data-testid={`delivery-item-${del.id}`}>
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant={del.status === "delivered" ? "default" : "secondary"}
-                          className={del.status === "delivered" ? "bg-green-600 text-white" : ""}
-                          data-testid={`delivery-status-${del.id}`}
-                        >
-                          {del.status.charAt(0).toUpperCase() + del.status.slice(1)}
-                        </Badge>
-                        <span className="text-sm text-muted-foreground">{del.provider.toUpperCase()}</span>
+              <div className="space-y-4">
+                {deliveries.map((del) => {
+                  const history = Array.isArray(del.statusHistory) ? del.statusHistory : [];
+                  const isFinal = del.status === "delivered" || del.status === "returned_to_sender";
+                  return (
+                    <div key={del.id} className="rounded-md bg-card border overflow-hidden" data-testid={`delivery-item-${del.id}`}>
+                      <div className="p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={del.status === "delivered" ? "default" : "secondary"}
+                              className={del.status === "delivered" ? "bg-green-600 text-white" : ""}
+                              data-testid={`delivery-status-${del.id}`}
+                            >
+                              {del.status.charAt(0).toUpperCase() + del.status.slice(1)}
+                            </Badge>
+                            <span className="text-sm text-muted-foreground">{del.provider.toUpperCase()}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="outline" disabled={trackDelivery.isPending || isFinal} onClick={() => trackDelivery.mutate(del.id)} data-testid={`button-track-${del.id}`}>
+                              {trackDelivery.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Refresh"}
+                            </Button>
+                            <span className="text-xs text-muted-foreground">{formatDateTime(del.createdAt)}</span>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                          {del.trackingNumber && (
+                            <div>
+                              <span className="text-xs text-muted-foreground block">Tracking Number</span>
+                              <span className="font-mono font-medium text-foreground" data-testid={`delivery-tracking-${del.id}`}>{del.trackingNumber}</span>
+                            </div>
+                          )}
+                          {del.certifiedMailNumber && (
+                            <div>
+                              <span className="text-xs text-muted-foreground block">Certified Mail #</span>
+                              <span className="font-mono font-medium text-foreground">{del.certifiedMailNumber}</span>
+                            </div>
+                          )}
+                          {del.expectedDeliveryDate && (
+                            <div>
+                              <span className="text-xs text-muted-foreground block">Expected Delivery</span>
+                              <span className="font-medium text-foreground" data-testid={`delivery-expected-${del.id}`}>{formatDate(del.expectedDeliveryDate)}</span>
+                            </div>
+                          )}
+                          {del.recipientName && (
+                            <div>
+                              <span className="text-xs text-muted-foreground block">Recipient</span>
+                              <span className="text-foreground">{del.recipientName}</span>
+                            </div>
+                          )}
+                          {del.recipientAddress && (
+                            <div>
+                              <span className="text-xs text-muted-foreground block">Address</span>
+                              <span className="text-foreground text-sm">{del.recipientAddress}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {history.length > 0 && (
+                          <div className="pt-2">
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">Delivery Timeline</span>
+                            <div className="relative pl-4">
+                              <div className="absolute left-1.5 top-0 bottom-0 w-px bg-border" />
+                              {history.map((entry: any, idx: number) => (
+                                <div key={idx} className="relative pb-3 last:pb-0">
+                                  <div className={`absolute left-[-22px] top-1 w-3 h-3 rounded-full border-2 ${
+                                    idx === 0 ? "bg-[#2E5FAA] border-[#2E5FAA]" : "bg-card border-muted-foreground/40"
+                                  }`} />
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Badge variant="secondary" className="text-[10px] capitalize">{entry.status}</Badge>
+                                    <span className="text-[11px] text-muted-foreground">{entry.timestamp ? formatDateTime(entry.timestamp) : "—"}</span>
+                                  </div>
+                                  {entry.detail && <p className="text-xs text-muted-foreground mt-0.5">{entry.detail}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <span className="text-xs text-muted-foreground">{formatDateTime(del.createdAt)}</span>
                     </div>
-                    {del.trackingNumber && (
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Tracking: </span>
-                        <span className="font-mono font-medium text-foreground" data-testid={`delivery-tracking-${del.id}`}>{del.trackingNumber}</span>
-                      </div>
-                    )}
-                    {del.certifiedMailNumber && (
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Certified Mail #: </span>
-                        <span className="font-mono font-medium text-foreground">{del.certifiedMailNumber}</span>
-                      </div>
-                    )}
-                    {del.expectedDeliveryDate && (
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Expected Delivery: </span>
-                        <span className="font-medium text-foreground" data-testid={`delivery-expected-${del.id}`}>{formatDate(del.expectedDeliveryDate)}</span>
-                      </div>
-                    )}
-                    {del.recipientName && (
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Recipient: </span>
-                        <span className="text-foreground">{del.recipientName}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card>
@@ -1295,41 +1357,117 @@ export default function CaseDashboard() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-3">
-                {courtForms.map((form) => (
-                  <div key={form.id} className="p-4 rounded-md bg-card border space-y-3" data-testid={`court-form-${form.id}`}>
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary">{form.formType}</Badge>
-                        <span className="text-sm font-medium text-foreground">{form.state}</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">{formatDateTime(form.generatedAt)}</span>
-                    </div>
-                    {form.formData && typeof form.formData === "object" && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                        {Object.entries(form.formData as Record<string, any>).map(([key, value]) => (
-                          <div key={key}>
-                            <span className="text-xs text-muted-foreground block">
-                              {key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-                            </span>
-                            <span className="font-medium text-foreground text-sm">
-                              {typeof value === "object" ? JSON.stringify(value) : String(value)}
-                            </span>
+              <div className="space-y-4">
+                {courtForms.map((form) => {
+                  const fd = form.formData as Record<string, any>;
+                  return (
+                    <div key={form.id} className="rounded-md bg-card border overflow-hidden" data-testid={`court-form-${form.id}`}>
+                      <div className="p-4 sm:p-5 space-y-5">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary">{form.formType.replace(/_/g, " ")}</Badge>
+                            <span className="text-sm font-medium text-foreground">{form.state}</span>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                    {stateLaw && (
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t flex-wrap">
-                        <span>{stateLaw.smallClaimsCourtName}</span>
-                        {stateLaw.smallClaimsFilingFee != null && (
-                          <span>Filing Fee: {formatCurrency(stateLaw.smallClaimsFilingFee)}</span>
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="outline" onClick={() => window.print()} data-testid={`button-print-court-form-${form.id}`}>
+                              <Printer className="mr-1.5 h-3.5 w-3.5" />
+                              Print
+                            </Button>
+                            <span className="text-xs text-muted-foreground">{formatDateTime(form.generatedAt)}</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                          <div>
+                            <span className="text-xs text-muted-foreground block">Court</span>
+                            <span className="font-medium text-foreground">{fd.courtName || "—"}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-muted-foreground block">Filing Fee</span>
+                            <span className="font-medium text-foreground">{fd.filingFee != null ? formatCurrency(fd.filingFee) : "—"}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-muted-foreground block">Max Claim</span>
+                            <span className="font-medium text-foreground">{fd.maxClaimAmount != null ? formatCurrency(fd.maxClaimAmount) : "—"}</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="p-3 rounded-md bg-muted/40 border">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-2">Plaintiff (You)</span>
+                            <p className="text-sm font-medium text-foreground">{fd.plaintiffName || "—"}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{fd.plaintiffAddress || "—"}</p>
+                          </div>
+                          <div className="p-3 rounded-md bg-muted/40 border">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-2">Defendant (Landlord)</span>
+                            <p className="text-sm font-medium text-foreground">{fd.defendantName || "—"}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{fd.defendantAddress || "—"}</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                          <div>
+                            <span className="text-xs text-muted-foreground block">Property</span>
+                            <span className="text-foreground">{fd.propertyAddress || "—"}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-muted-foreground block">Move-Out Date</span>
+                            <span className="text-foreground">{fd.moveOutDate ? formatDate(fd.moveOutDate) : "—"}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-muted-foreground block">Total Claim</span>
+                            <span className="font-semibold text-[#C9A84C]">{fd.totalClaimAmount != null ? formatCurrency(fd.totalClaimAmount) : "—"}</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                          <div>
+                            <span className="text-xs text-muted-foreground block">Deposit Paid</span>
+                            <span className="font-medium">{fd.depositAmount != null ? formatCurrency(fd.depositAmount) : "—"}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-muted-foreground block">Amount Returned</span>
+                            <span className="font-medium">{fd.amountReturned != null ? formatCurrency(fd.amountReturned) : "—"}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-muted-foreground block">Amount Withheld</span>
+                            <span className="font-medium">{fd.amountWithheld != null ? formatCurrency(fd.amountWithheld) : "—"}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-muted-foreground block">Demand Amount</span>
+                            <span className="font-medium">{fd.demandAmount != null ? formatCurrency(fd.demandAmount) : "—"}</span>
+                          </div>
+                        </div>
+
+                        <div className="p-3 rounded-md bg-[#2E5FAA]/5 border border-[#2E5FAA]/15">
+                          <span className="text-[10px] font-bold text-[#2E5FAA] uppercase tracking-wider block mb-2">Legal Basis</span>
+                          <p className="text-sm text-foreground">{fd.legalBasis || "—"}</p>
+                        </div>
+
+                        {fd.violationSummary && (
+                          <div className="p-3 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+                            <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider block mb-1">Violation Summary</span>
+                            <p className="text-sm text-foreground">{fd.violationSummary}</p>
+                          </div>
                         )}
-                        <span>Max: {formatCurrency(stateLaw.smallClaimsLimit)}</span>
+
+                        {fd.claimDescription && (
+                          <div className="p-3 rounded-md border bg-card">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-2">Claim Description</span>
+                            <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">{fd.claimDescription}</p>
+                          </div>
+                        )}
+
+                        {fd.filingInstructions && (
+                          <div className="p-3 rounded-md bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+                            <span className="text-[10px] font-bold text-green-700 dark:text-green-300 uppercase tracking-wider block mb-1">Filing Instructions</span>
+                            <p className="text-sm text-foreground leading-relaxed">{fd.filingInstructions}</p>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </Card>

@@ -14,6 +14,7 @@ import GenerateLetterPage from "@/pages/generate-letter";
 import LetterPreviewPage from "@/pages/letter-preview";
 import PrivacyPolicyPage from "@/pages/privacy-policy";
 import TermsOfServicePage from "@/pages/terms-of-service";
+import AboutPage from "@/pages/about";
 
 function Router() {
   return (
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/cases/:id/letter" component={LetterPreviewPage} />
       <Route path="/privacy" component={PrivacyPolicyPage} />
       <Route path="/terms" component={TermsOfServicePage} />
+      <Route path="/about" component={AboutPage} />
       <Route component={NotFound} />
     </Switch>
   );

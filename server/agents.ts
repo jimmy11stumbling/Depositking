@@ -19,6 +19,26 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): 
   ]);
 }
 
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  opts: { maxRetries?: number; baseDelayMs?: number; label?: string } = {}
+): Promise<T> {
+  const { maxRetries = 3, baseDelayMs = 1000, label = "Operation" } = opts;
+  let lastErr: any;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastErr = err;
+      if (attempt >= maxRetries) break;
+      const delay = baseDelayMs * Math.pow(2, attempt - 1);
+      console.warn(`${label} failed (attempt ${attempt}/${maxRetries}): ${err.message}. Retrying in ${delay}ms...`);
+      await new Promise((res) => setTimeout(res, delay));
+    }
+  }
+  throw new Error(`${label} failed after ${maxRetries} attempts: ${lastErr?.message || lastErr}`);
+}
+
 interface CaseData {
   state: string;
   stateName: string;

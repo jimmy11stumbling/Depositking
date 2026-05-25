@@ -2,7 +2,7 @@ import { db } from "./db";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
 import {
-  cases, deductions, letters, signatures, evidence, deliveries, courtForms,
+  cases, deductions, letters, signatures, evidence, deliveries, courtForms, analyticsEvents,
   type Case, type InsertCase,
   type Deduction, type InsertDeduction,
   type Letter, type InsertLetter,
@@ -10,6 +10,7 @@ import {
   type Evidence, type InsertEvidence,
   type Delivery, type InsertDelivery,
   type CourtForm, type InsertCourtForm,
+  type AnalyticsEvent, type InsertAnalyticsEvent,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -42,6 +43,9 @@ export interface IStorage {
 
   createCourtForm(data: InsertCourtForm): Promise<CourtForm>;
   getCourtFormsByCase(caseId: number): Promise<CourtForm[]>;
+
+  createAnalyticsEvent(data: InsertAnalyticsEvent): Promise<AnalyticsEvent>;
+  getAnalyticsEventsByCase(caseId: number): Promise<AnalyticsEvent[]>;
 }
 
 function generateAccessToken(): string {
@@ -156,6 +160,15 @@ export class DatabaseStorage implements IStorage {
 
   async getCourtFormsByCase(caseId: number): Promise<CourtForm[]> {
     return db.select().from(courtForms).where(eq(courtForms.caseId, caseId));
+  }
+
+  async createAnalyticsEvent(data: InsertAnalyticsEvent): Promise<AnalyticsEvent> {
+    const [result] = await db.insert(analyticsEvents).values(data).returning();
+    return result;
+  }
+
+  async getAnalyticsEventsByCase(caseId: number): Promise<AnalyticsEvent[]> {
+    return db.select().from(analyticsEvents).where(eq(analyticsEvents.caseId, caseId));
   }
 }
 

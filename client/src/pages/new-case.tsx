@@ -28,9 +28,15 @@ const caseFormSchema = z.object({
   ),
   amountReturned: z.string().default("0"),
   tenantName: z.string().min(1, "Your name is required"),
-  tenantAddress: z.string().min(1, "Your current address is required"),
+  tenantStreet: z.string().min(1, "Street address is required"),
+  tenantCity: z.string().min(1, "City is required"),
+  tenantState: z.string().min(1, "State is required"),
+  tenantZip: z.string().min(5, "Valid ZIP code is required").refine((v) => /^\d{5}(-\d{4})?$/.test(v), "Must be a valid US ZIP code"),
   landlordName: z.string().min(1, "Landlord name is required"),
-  landlordAddress: z.string().min(1, "Landlord address is required"),
+  landlordStreet: z.string().min(1, "Street address is required"),
+  landlordCity: z.string().min(1, "City is required"),
+  landlordState: z.string().min(1, "State is required"),
+  landlordZip: z.string().min(5, "Valid ZIP code is required").refine((v) => /^\d{5}(-\d{4})?$/.test(v), "Must be a valid US ZIP code"),
   propertyAddress: z.string().min(1, "Rental property address is required"),
   tenancyStart: z.string().optional(),
 });
@@ -51,9 +57,15 @@ export default function NewCasePage() {
       depositAmount: "",
       amountReturned: "0",
       tenantName: "",
-      tenantAddress: "",
+      tenantStreet: "",
+      tenantCity: "",
+      tenantState: "",
+      tenantZip: "",
       landlordName: "",
-      landlordAddress: "",
+      landlordStreet: "",
+      landlordCity: "",
+      landlordState: "",
+      landlordZip: "",
       propertyAddress: "",
       tenancyStart: "",
     },
@@ -67,9 +79,17 @@ export default function NewCasePage() {
         depositAmount: data.depositAmount,
         amountReturned: data.amountReturned || "0",
         tenantName: data.tenantName,
-        tenantAddress: data.tenantAddress,
+        tenantAddress: `${data.tenantStreet}, ${data.tenantCity}, ${data.tenantState} ${data.tenantZip}`,
+        tenantStreet: data.tenantStreet,
+        tenantCity: data.tenantCity,
+        tenantState: data.tenantState,
+        tenantZip: data.tenantZip,
         landlordName: data.landlordName,
-        landlordAddress: data.landlordAddress,
+        landlordAddress: `${data.landlordStreet}, ${data.landlordCity}, ${data.landlordState} ${data.landlordZip}`,
+        landlordStreet: data.landlordStreet,
+        landlordCity: data.landlordCity,
+        landlordState: data.landlordState,
+        landlordZip: data.landlordZip,
         propertyAddress: data.propertyAddress,
         tenancyStart: data.tenancyStart || null,
       });
@@ -99,7 +119,7 @@ export default function NewCasePage() {
 
   const canProceedToStep3 = () => {
     const values = form.getValues();
-    return values.tenantName && values.tenantAddress && values.propertyAddress;
+    return values.tenantName && values.tenantStreet && values.tenantCity && values.tenantState && values.tenantZip && values.propertyAddress;
   };
 
   return (
@@ -296,22 +316,74 @@ export default function NewCasePage() {
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="tenantAddress"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-[#2E5FAA]" />
-                          Your current mailing address
-                        </FormLabel>
-                        <FormControl>
-                          <Input placeholder="123 New St, City, State ZIP" data-testid="input-tenant-address" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="tenantStreet"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-2">
+                            <MapPin className="h-4 w-4 text-[#2E5FAA]" />
+                            Street address
+                          </FormLabel>
+                          <FormControl>
+                            <Input placeholder="123 New St, Apt 4B" data-testid="input-tenant-street" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="tenantCity"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>City</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Springfield" data-testid="input-tenant-city" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="tenantState"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>State</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-tenant-state">
+                                  <SelectValue placeholder="State" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {US_STATES.map((s) => (
+                                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <FormField
+                      control={form.control}
+                      name="tenantZip"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>ZIP Code</FormLabel>
+                          <FormControl>
+                            <Input placeholder="12345" data-testid="input-tenant-zip" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
                   <FormField
                     control={form.control}
@@ -339,7 +411,7 @@ export default function NewCasePage() {
                   <Button
                     type="button"
                     data-testid="button-next-step-2"
-                    onClick={() => canProceedToStep3() ? setStep(3) : form.trigger(["tenantName", "tenantAddress", "propertyAddress"])}
+                    onClick={() => canProceedToStep3() ? setStep(3) : form.trigger(["tenantName", "tenantStreet", "tenantCity", "tenantState", "tenantZip", "propertyAddress"])}
                   >
                     Continue
                     <ArrowRight className="ml-1 h-4 w-4" />
@@ -377,22 +449,74 @@ export default function NewCasePage() {
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="landlordAddress"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-[#2E5FAA]" />
-                          Landlord mailing address
-                        </FormLabel>
-                        <FormControl>
-                          <Input placeholder="456 Landlord Ave, City, State ZIP" data-testid="input-landlord-address" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="landlordStreet"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-2">
+                            <MapPin className="h-4 w-4 text-[#2E5FAA]" />
+                            Street address
+                          </FormLabel>
+                          <FormControl>
+                            <Input placeholder="456 Landlord Ave, Suite 100" data-testid="input-landlord-street" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="landlordCity"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>City</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Springfield" data-testid="input-landlord-city" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="landlordState"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>State</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-landlord-state">
+                                  <SelectValue placeholder="State" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {US_STATES.map((s) => (
+                                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <FormField
+                      control={form.control}
+                      name="landlordZip"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>ZIP Code</FormLabel>
+                          <FormControl>
+                            <Input placeholder="12345" data-testid="input-landlord-zip" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 </div>
 
                 <div className="mt-8 flex justify-between">
